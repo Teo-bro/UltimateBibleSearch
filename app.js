@@ -7,14 +7,13 @@
         'krv2': { file: 'bible_data_krv2.json', name: '개역개정', abbr: '개정', isEn: false, data: {} }
     };
     
-    // 💡 초기 설정: 한글킹제임스성경만 뜨게 변경
     let selectedVersions = ['kr']; 
 
     let currentBook = null; 
     let currentChapter = null; 
     let currentVerse = null; 
     let displayMode = "standard"; 
-    let searchMode = "exact"; // 💡 검색 모드 (exact, and, or)
+    let searchMode = "exact"; 
     let isCaseSensitive = false; 
     let currentFontSize = "16px"; 
     let toastTimeout; 
@@ -31,7 +30,7 @@
     let redoStack = [];    
     let isRestoring = false; 
     
-    // 성경 책 정보
+    // 💡 대체 이름(altNames) 배열 추가 및 요한복음 오타 수정
     const bibleBooks = [
         { name: "창세기", abbr: "창", enName: "Genesis", enAbbr: "Gen", chapters: 50, testament: "old" },
         { name: "출애굽기", abbr: "출", enName: "Exodus", enAbbr: "Exod", chapters: 40, testament: "old" },
@@ -39,14 +38,14 @@
         { name: "민수기", abbr: "민", enName: "Numbers", enAbbr: "Num", chapters: 36, testament: "old" },
         { name: "신명기", abbr: "신", enName: "Deuteronomy", enAbbr: "Deut", chapters: 34, testament: "old" },
         { name: "여호수아", abbr: "수", enName: "Joshua", enAbbr: "Josh", chapters: 24, testament: "old" },
-        { name: "재판관기", abbr: "판", enName: "Judges", enAbbr: "Judg", chapters: 21, testament: "old" },
+        { name: "재판관기", abbr: "판", altNames: ["사사기", "삿"], enName: "Judges", enAbbr: "Judg", chapters: 21, testament: "old" },
         { name: "룻기", abbr: "룻", enName: "Ruth", enAbbr: "Ruth", chapters: 4, testament: "old" },
         { name: "사무엘상", abbr: "삼상", enName: "1 Samuel", enAbbr: "1 Sam", chapters: 31, testament: "old" },
         { name: "사무엘하", abbr: "삼하", enName: "2 Samuel", enAbbr: "2 Sam", chapters: 24, testament: "old" },
         { name: "열왕기상", abbr: "왕상", enName: "1 Kings", enAbbr: "1 Kgs", chapters: 22, testament: "old" },
         { name: "열왕기하", abbr: "왕하", enName: "2 Kings", enAbbr: "2 Kgs", chapters: 25, testament: "old" },
-        { name: "역대기상", abbr: "대상", enName: "1 Chronicles", enAbbr: "1 Chr", chapters: 29, testament: "old" },
-        { name: "역대기하", abbr: "대하", enName: "2 Chronicles", enAbbr: "2 Chr", chapters: 36, testament: "old" },
+        { name: "역대기상", abbr: "대상", altNames: ["역대상"], enName: "1 Chronicles", enAbbr: "1 Chr", chapters: 29, testament: "old" },
+        { name: "역대기하", abbr: "대하", altNames: ["역대하"], enName: "2 Chronicles", enAbbr: "2 Chr", chapters: 36, testament: "old" },
         { name: "에스라", abbr: "스", enName: "Ezra", enAbbr: "Ezra", chapters: 10, testament: "old" },
         { name: "느헤미야", abbr: "느", enName: "Nehemiah", enAbbr: "Neh", chapters: 13, testament: "old" },
         { name: "에스더", abbr: "에", enName: "Esther", enAbbr: "Esth", chapters: 10, testament: "old" },
@@ -54,7 +53,7 @@
         { name: "시편", abbr: "시", enName: "Psalms", enAbbr: "Ps", chapters: 150, testament: "old" },
         { name: "잠언", abbr: "잠", enName: "Proverbs", enAbbr: "Prov", chapters: 31, testament: "old" },
         { name: "전도서", abbr: "전", enName: "Ecclesiastes", enAbbr: "Eccl", chapters: 12, testament: "old" },
-        { name: "솔로몬의 노래", abbr: "솔", enName: "Song of Solomon", enAbbr: "Song", chapters: 8, testament: "old" },
+        { name: "솔로몬의 노래", abbr: "솔", altNames: ["솔로몬의 아가", "아가", "아"], enName: "Song of Solomon", enAbbr: "Song", chapters: 8, testament: "old" },
         { name: "이사야", abbr: "사", enName: "Isaiah", enAbbr: "Isa", chapters: 66, testament: "old" },
         { name: "예레미야", abbr: "렘", enName: "Jeremiah", enAbbr: "Jer", chapters: 52, testament: "old" },
         { name: "예레미야 애가", abbr: "애", enName: "Lamentations", enAbbr: "Lam", chapters: 5, testament: "old" },
@@ -65,17 +64,17 @@
         { name: "아모스", abbr: "암", enName: "Amos", enAbbr: "Amos", chapters: 9, testament: "old" },
         { name: "오바댜", abbr: "옵", enName: "Obadiah", enAbbr: "Obad", chapters: 1, testament: "old" },
         { name: "요나", abbr: "욘", enName: "Jonah", enAbbr: "Jonah", chapters: 4, testament: "old" },
-        { name: "미카", abbr: "미", enName: "Micah", enAbbr: "Mic", chapters: 7, testament: "old" },
+        { name: "미카", abbr: "미", altNames: ["미가"], enName: "Micah", enAbbr: "Mic", chapters: 7, testament: "old" },
         { name: "나훔", abbr: "나", enName: "Nahum", enAbbr: "Nah", chapters: 3, testament: "old" },
         { name: "하박국", abbr: "합", enName: "Habakkuk", enAbbr: "Hab", chapters: 3, testament: "old" },
-        { name: "스파냐", abbr: "슾", enName: "Zephaniah", enAbbr: "Zeph", chapters: 3, testament: "old" },
+        { name: "스파냐", abbr: "슾", altNames: ["스바냐", "습"], enName: "Zephaniah", enAbbr: "Zeph", chapters: 3, testament: "old" },
         { name: "학개", abbr: "학", enName: "Haggai", enAbbr: "Hag", chapters: 2, testament: "old" },
-        { name: "스카랴", abbr: "슼", enName: "Zechariah", enAbbr: "Zech", chapters: 14, testament: "old" },
-        { name: "말라키", abbr: "말", enName: "Malachi", enAbbr: "Mal", chapters: 4, testament: "old" },
+        { name: "스카랴", abbr: "슼", altNames: ["스가랴", "슥"], enName: "Zechariah", enAbbr: "Zech", chapters: 14, testament: "old" },
+        { name: "말라키", abbr: "말", altNames: ["말라기"], enName: "Malachi", enAbbr: "Mal", chapters: 4, testament: "old" },
         { name: "마태복음", abbr: "마", enName: "Matthew", enAbbr: "Matt", chapters: 28, testament: "new" },
         { name: "마가복음", abbr: "막", enName: "Mark", enAbbr: "Mark", chapters: 16, testament: "new" },
         { name: "누가복음", abbr: "눅", enName: "Luke", enAbbr: "Luke", chapters: 24, testament: "new" },
-        { name: "요한복음", 파br: "요", enName: "John", enAbbr: "John", chapters: 21, testament: "new" },
+        { name: "요한복음", abbr: "요", enName: "John", enAbbr: "John", chapters: 21, testament: "new" },
         { name: "사도행전", abbr: "행", enName: "Acts", enAbbr: "Acts", chapters: 28, testament: "new" },
         { name: "로마서", abbr: "롬", enName: "Romans", enAbbr: "Rom", chapters: 16, testament: "new" },
         { name: "고린도전서", abbr: "고전", enName: "1 Corinthians", enAbbr: "1 Cor", chapters: 16, testament: "new" },
@@ -94,9 +93,9 @@
         { name: "야고보서", abbr: "약", enName: "James", enAbbr: "Jas", chapters: 5, testament: "new" },
         { name: "베드로전서", abbr: "벧전", enName: "1 Peter", enAbbr: "1 Pet", chapters: 5, testament: "new" },
         { name: "베드로후서", abbr: "벧후", enName: "2 Peter", enAbbr: "2 Pet", chapters: 3, testament: "new" },
-        { name: "요한일서", abbr: "요일", enName: "1 John", enAbbr: "1 John", chapters: 5, testament: "new" },
-        { name: "요한이서", abbr: "요이", enName: "2 John", enAbbr: "2 John", chapters: 1, testament: "new" },
-        { name: "요한삼서", abbr: "요삼", enName: "3 John", enAbbr: "3 John", chapters: 1, testament: "new" },
+        { name: "요한일서", abbr: "요일", altNames: ["요한1서"], enName: "1 John", enAbbr: "1 John", chapters: 5, testament: "new" },
+        { name: "요한이서", abbr: "요이", altNames: ["요한2서"], enName: "2 John", enAbbr: "2 John", chapters: 1, testament: "new" },
+        { name: "요한삼서", abbr: "요삼", altNames: ["요한3서"], enName: "3 John", enAbbr: "3 John", chapters: 1, testament: "new" },
         { name: "유다서", abbr: "유", enName: "Jude", enAbbr: "Jude", chapters: 1, testament: "new" },
         { name: "요한계시록", abbr: "계", enName: "Revelation", enAbbr: "Rev", chapters: 22, testament: "new" }
     ];
@@ -111,20 +110,65 @@
         bookToChapters[book.abbr] = book.chapters;
     });
 
+    // 💡 대체 약어 하드코딩 매핑 (안전하게 이름 찾기용)
+    const altAbbrMap = {
+        "사사기": "삿",
+        "역대상": "대상",
+        "역대하": "대하",
+        "솔로몬의 아가": "아",
+        "아가": "아",
+        "미가": "미",
+        "스바냐": "습",
+        "스가랴": "슥",
+        "말라기": "말",
+        "요한1서": "요일",
+        "요한2서": "요이",
+        "요한3서": "요삼"
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
         const fetchPromises = Object.keys(versionsMeta).map(key => 
             fetch(versionsMeta[key].file)
                 .then(res => res.json())
                 .then(data => {
+                    if (!versionsMeta[key].bookNames) versionsMeta[key].bookNames = {};
+                    if (!versionsMeta[key].bookAbbrs) versionsMeta[key].bookAbbrs = {};
+
                     data.forEach(item => {
-                        let bookName = item.book;
-                        if (versionsMeta[key].isEn) {
-                            const bookObj = bibleBooks.find(b => b.enName.toLowerCase() === item.book.toLowerCase() || b.name === item.book);
-                            if(bookObj) bookName = bookObj.name;
+                        let originalName = item.book;
+                        let baseBookName = originalName;
+
+                        // 영어이거나 다른 한글 역본의 대체 이름일 경우 한킹(표준) 이름으로 정규화
+                        const bookObj = bibleBooks.find(b => 
+                            b.name === originalName || 
+                            b.enName.toLowerCase() === originalName.toLowerCase() ||
+                            (b.altNames && b.altNames.includes(originalName))
+                        );
+
+                        if(bookObj) {
+                            baseBookName = bookObj.name;
                         }
-                        if (!versionsMeta[key].data[bookName]) versionsMeta[key].data[bookName] = {};
-                        if (!versionsMeta[key].data[bookName][item.chapter]) versionsMeta[key].data[bookName][item.chapter] = {};
-                        versionsMeta[key].data[bookName][item.chapter][item.verse] = item.text;
+
+                        // 역본별로 화면에 보여줄 진짜 원본 이름과 약어 저장
+                        versionsMeta[key].bookNames[baseBookName] = originalName;
+                        
+                        if (versionsMeta[key].isEn) {
+                            versionsMeta[key].bookAbbrs[baseBookName] = bookObj ? bookObj.enAbbr : originalName;
+                        } else {
+                            if (bookObj) {
+                                if (originalName !== bookObj.name && altAbbrMap[originalName]) {
+                                    versionsMeta[key].bookAbbrs[baseBookName] = altAbbrMap[originalName];
+                                } else {
+                                    versionsMeta[key].bookAbbrs[baseBookName] = bookObj.abbr;
+                                }
+                            } else {
+                                versionsMeta[key].bookAbbrs[baseBookName] = originalName;
+                            }
+                        }
+
+                        if (!versionsMeta[key].data[baseBookName]) versionsMeta[key].data[baseBookName] = {};
+                        if (!versionsMeta[key].data[baseBookName][item.chapter]) versionsMeta[key].data[baseBookName][item.chapter] = {};
+                        versionsMeta[key].data[baseBookName][item.chapter][item.verse] = item.text;
                     });
                 })
                 .catch(err => console.error(`${versionsMeta[key].file} 로드 실패:`, err))
@@ -142,12 +186,10 @@
         });
     });
 
-    // 정규식 특수문자 이스케이프 함수
     function escapeRegExp(string) {
         return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
-    // 💡 패널 생성 및 상단 복사 버튼/이름 배치
     function updateUIBySelectedVersions() {
         const wrapper = document.getElementById('output-wrapper');
         
@@ -167,7 +209,6 @@
             
             const meta = versionsMeta[v];
             let labelHtml = "";
-            // 한킹, KJV 제외 다른 역본은 패널 상단에 라벨 추가
             if (v !== 'kr' && v !== 'en') {
                 labelHtml = `<span style="font-weight:bold; margin-left:10px; color:#555;">[${meta.name}]</span>`;
             }
@@ -191,7 +232,6 @@
         setTimeout(alignVerseHeights, 50);
     }
 
-    // 💡 패널 안의 content 영역끼리 높이 맞추기
     function alignVerseHeights() {
         if (selectedVersions.length <= 1) {
             selectedVersions.forEach(v => {
@@ -235,7 +275,6 @@
                 const afterElement = getDragAfterElement(list, e.clientY);
                 const draggable = document.querySelector('.dragging');
                 if (draggable) {
-                    // 💡 최대 4개 제한
                     if (list.id === 'selected-versions-list' && list.children.length >= 4 && !list.contains(draggable)) {
                         return; 
                     }
@@ -321,7 +360,7 @@
 
     function createBookButtons() {
         const sidebar = document.getElementById('bible-buttons-container');
-        sidebar.innerHTML = ''; // 초기화
+        sidebar.innerHTML = ''; 
         let currentTestament = null;
         for (let i = 0; i < bibleBooks.length; i += 3) {
             if (currentTestament === "old" && bibleBooks[i].testament === "new") {
@@ -408,9 +447,12 @@
             const outContent = document.getElementById(`content-${v}`);
             if(!outContent) return;
             const meta = versionsMeta[v];
-            const displayBookName = meta.isEn ? (bibleBooks.find(b => b.name === bookName)?.enName || bookName) : bookName;
             
-            let html = `<h2 class="chapter-title" data-verse-id="header">${displayBookName} ${chapter}${meta.isEn ? "" : (bookName==="시편"?"편":"장")}</h2>`;
+            // 💡 고유 이름으로 변환 (KJV는 Genesis, 흠정역은 솔로몬의 아가 등으로 출력)
+            const displayBookName = meta.bookNames?.[bookName] || bookName;
+            const postfix = meta.isEn ? "" : (bookName==="시편"?"편":"장");
+            
+            let html = `<h2 class="chapter-title" data-verse-id="header">${displayBookName} ${chapter}${postfix}</h2>`;
             
             for (const verseNum of verseNums) {
                 const text = meta.data[bookName]?.[chapter]?.[verseNum] || "";
@@ -434,14 +476,12 @@
         }, 50);
     }
 
-    // 💡 검색 로직 (다중 단어 AND/OR 처리 및 전체 하이라이트)
     function searchWord(word) {
         saveState();
         clearTimeout(renderTimer); 
         
         let results = [];
         
-        // 검색어 단어 분리
         const words = searchMode === 'exact' ? [word] : word.split(/\s+/).filter(w => w.length > 0);
         if (words.length === 0) return;
 
@@ -484,10 +524,8 @@
             return;
         }
 
-        // 결과 요약 문구 동적 생성
         let summaryText = "";
         if (searchMode === 'exact') {
-            // 기존 문구 유지 (발견된 횟수를 구하기가 exact일땐 쉬움)
             const exactRegex = new RegExp(escapeRegExp(words[0]), regexFlags);
             let totalOccurrences = 0;
             results.forEach(r => {
@@ -536,12 +574,11 @@
                 const { book, chapter, verse } = currentSearchResults[idx];
                 const text = meta.data[book]?.[chapter]?.[verse] || "";
                 
-                // 검색된 모든 단어 동시 하이라이트
                 const highlighted = text.replace(highlightRegex, match => `<span class="highlight">${match}</span>`);
                 
-                const bookObj = bibleBooks.find(b => b.name === book);
-                const displayBook = meta.isEn ? (bookObj?.enName || book) : book;
-                const displayAbbr = meta.isEn ? (bookObj?.enAbbr || book) : (nameToAbbr[book] || book);
+                // 💡 고유 이름 및 약어 사용 (매핑된 데이터 기반)
+                const displayBook = meta.bookNames?.[book] || book;
+                const displayAbbr = meta.bookAbbrs?.[book] || book;
                 const uniqueId = `search-${idx}`;
 
                 let p = "";
@@ -560,7 +597,11 @@
         });
         
         renderedResultCount = chunkEnd;
-        setTimeout(alignVerseHeights, 10);
+        
+        // 💡 검색 멈춤/과부하 현상 해결: 청크 렌더링 도중에는 높이 맞춤(Reflow)을 생략하고 완전히 끝났을 때만 호출
+        if (renderedResultCount >= currentSearchResults.length) {
+            setTimeout(alignVerseHeights, 50);
+        }
     }
 
     function executeSearch(rawQuery) {
@@ -600,7 +641,16 @@
             let chapter = match[2];
             let versePart = match[3];
             let cleanBookRaw = clean(bookRaw);
-            let bookObj = bibleBooks.find(b => clean(b.name) === cleanBookRaw || clean(b.abbr) === cleanBookRaw || clean(b.enName) === cleanBookRaw || clean(b.enAbbr) === cleanBookRaw || clean(b.enName).startsWith(cleanBookRaw));
+            
+            // 💡 검색 시 대체 이름 및 약어로도 인식되게 수정
+            let bookObj = bibleBooks.find(b => 
+                clean(b.name) === cleanBookRaw || 
+                clean(b.abbr) === cleanBookRaw || 
+                clean(b.enName) === cleanBookRaw || 
+                clean(b.enAbbr) === cleanBookRaw || 
+                clean(b.enName).startsWith(cleanBookRaw) ||
+                (b.altNames && b.altNames.some(alt => clean(alt) === cleanBookRaw || clean(alt.replace(/[0-9]/g, '')) === cleanBookRaw))
+            );
             
             if (!bookObj) {
                 selectedVersions.forEach(v => {
@@ -661,9 +711,8 @@
                     const { book, chapter, verses: groupVerses } = group;
                     if (groupVerses.length === 0) return;
 
-                    const bookObj = bibleBooks.find(b => b.name === book);
-                    const displayBook = meta.isEn ? (bookObj?.enName || book) : book;
-                    const displayAbbr = meta.isEn ? (bookObj?.enAbbr || book) : (nameToAbbr[book] || book);
+                    const displayBook = meta.bookNames?.[book] || book;
+                    const displayAbbr = meta.bookAbbrs?.[book] || book;
                     const verseNums = groupVerses.map(vv => vv.verse).sort((a, b) => a - b);
                     
                     let ranges = [], currentRange = [verseNums[0]];
@@ -705,9 +754,9 @@
                 verses.forEach((verseObj, idx) => {
                     const { book, chapter, verse: verseNum } = verseObj;
                     const text = meta.data[book]?.[chapter]?.[verseNum] || "";
-                    const bookObj = bibleBooks.find(b => b.name === book);
-                    const displayBook = meta.isEn ? (bookObj?.enName || book) : book;
-                    const displayAbbr = meta.isEn ? (bookObj?.enAbbr || book) : (nameToAbbr[book] || book);
+                    
+                    const displayBook = meta.bookNames?.[book] || book;
+                    const displayAbbr = meta.bookAbbrs?.[book] || book;
                     const uniqueId = `vs-${idx}`;
                     
                     let p = "";
@@ -742,7 +791,6 @@
     }
 
     function setupEventListeners() {
-        // 💡 사이드바 설정 토글
         document.getElementById('sidebar-settings-btn').addEventListener('click', () => {
             const panel = document.getElementById('sidebar-settings-panel');
             panel.classList.toggle('hidden');
@@ -759,7 +807,6 @@
 
         document.getElementById('format-dropdown').addEventListener('change', (e) => changeDisplayMode(e.target.value));
         
-        // 💡 검색 모드 드롭다운 이벤트
         document.getElementById('search-mode-dropdown').addEventListener('change', (e) => {
             searchMode = e.target.value;
             if (isSearchActive && currentSearchWord) executeSearch(document.getElementById('search-input').value.trim()); 
@@ -964,7 +1011,6 @@
         setTimeout(alignVerseHeights, 10);
     }
 
-    // 복사 기능 시 헤더 등은 무시하고 실제 텍스트 내용만 파싱
     function prepareContentForCopy(outputElement) {
         const clone = outputElement.cloneNode(true);
         clone.querySelectorAll('br').forEach(br => {
@@ -1053,7 +1099,6 @@
             renderNextSearchChunk(true); 
         }
 
-        // 💡 실제 텍스트가 담긴 content 요소 참조
         const output = document.getElementById(`content-${versionKey}`);
         if (!output || output.innerText.trim() === '') {
             showToast('⚠️ 복사할 내용이 없습니다.');
