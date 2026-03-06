@@ -907,7 +907,7 @@
 
             if (isInsideOutput && !isSearchActive) {
                 let copiedText = selection.toString();
-                copiedText = copiedText.replace(/(?:\r?\n){2,}/g, '\n');
+                copiedText = copiedText.replace(/(?:\r?\n){2,}/g, '\n\n');
                 e.clipboardData.setData('text/plain', copiedText);
                 e.preventDefault(); 
             }
@@ -1125,3 +1125,4 @@
                 document.body.removeChild(tempTextArea);
             });
     }
+
