@@ -6,12 +6,15 @@
         'krv': { file: 'bible_data_krv.json', name: '개역한글', abbr: '개역', isEn: false, data: {} },
         'krv2': { file: 'bible_data_krv2.json', name: '개역개정', abbr: '개정', isEn: false, data: {} }
     };
-    let selectedVersions = ['kr', 'en']; // 기본값 2개 선택
+    
+    // 💡 초기 설정: 한글킹제임스성경만 뜨게 변경
+    let selectedVersions = ['kr']; 
 
     let currentBook = null; 
     let currentChapter = null; 
     let currentVerse = null; 
     let displayMode = "standard"; 
+    let searchMode = "exact"; // 💡 검색 모드 (exact, and, or)
     let isCaseSensitive = false; 
     let currentFontSize = "16px"; 
     let toastTimeout; 
@@ -19,7 +22,6 @@
     // 타임 로딩 변수
     let currentSearchResults = [];
     let currentSearchWord = "";
-    let currentSearchOccurrences = 0;
     let renderedResultCount = 0;
     const RENDER_CHUNK_SIZE = 200;
     let isSearchActive = false;
@@ -29,7 +31,7 @@
     let redoStack = [];    
     let isRestoring = false; 
     
-    // 성경 책 정보 (기존과 동일)
+    // 성경 책 정보
     const bibleBooks = [
         { name: "창세기", abbr: "창", enName: "Genesis", enAbbr: "Gen", chapters: 50, testament: "old" },
         { name: "출애굽기", abbr: "출", enName: "Exodus", enAbbr: "Exod", chapters: 40, testament: "old" },
@@ -73,7 +75,7 @@
         { name: "마태복음", abbr: "마", enName: "Matthew", enAbbr: "Matt", chapters: 28, testament: "new" },
         { name: "마가복음", abbr: "막", enName: "Mark", enAbbr: "Mark", chapters: 16, testament: "new" },
         { name: "누가복음", abbr: "눅", enName: "Luke", enAbbr: "Luke", chapters: 24, testament: "new" },
-        { name: "요한복음", abbr: "요", enName: "John", enAbbr: "John", chapters: 21, testament: "new" },
+        { name: "요한복음", 파br: "요", enName: "John", enAbbr: "John", chapters: 21, testament: "new" },
         { name: "사도행전", abbr: "행", enName: "Acts", enAbbr: "Acts", chapters: 28, testament: "new" },
         { name: "로마서", abbr: "롬", enName: "Romans", enAbbr: "Rom", chapters: 16, testament: "new" },
         { name: "고린도전서", abbr: "고전", enName: "1 Corinthians", enAbbr: "1 Cor", chapters: 16, testament: "new" },
@@ -110,14 +112,12 @@
     });
 
     document.addEventListener('DOMContentLoaded', () => {
-        // 모든 JSON 파일 로드
         const fetchPromises = Object.keys(versionsMeta).map(key => 
             fetch(versionsMeta[key].file)
                 .then(res => res.json())
                 .then(data => {
                     data.forEach(item => {
                         let bookName = item.book;
-                        // 영어 역본인 경우 한국어 책 이름으로 정규화하여 저장
                         if (versionsMeta[key].isEn) {
                             const bookObj = bibleBooks.find(b => b.enName.toLowerCase() === item.book.toLowerCase() || b.name === item.book);
                             if(bookObj) bookName = bookObj.name;
@@ -133,71 +133,87 @@
         Promise.all(fetchPromises).then(() => {
             document.getElementById('output-wrapper').innerHTML = ''; 
             createBookButtons();
-            initDragAndDrop(); // 드래그 앤 드롭 초기화
-            updateUIBySelectedVersions(); // 복사 버튼 및 패널 생성
+            initDragAndDrop(); 
+            updateUIBySelectedVersions(); 
             setupEventListeners();
             loadInitialData();
             document.getElementById('format-dropdown').value = displayMode;
+            document.getElementById('search-mode-dropdown').value = searchMode;
         });
     });
 
-    // 💡 선택된 역본에 따라 복사버튼 및 출력 패널 생성
+    // 정규식 특수문자 이스케이프 함수
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    // 💡 패널 생성 및 상단 복사 버튼/이름 배치
     function updateUIBySelectedVersions() {
         const wrapper = document.getElementById('output-wrapper');
-        const btnContainer = document.getElementById('copy-buttons-container');
         
-        // 검색중 텍스트 유실 방지를 위한 임시 저장
         const prevContents = {};
         selectedVersions.forEach(v => {
-            const el = document.getElementById(`output-${v}`);
-            if(el) prevContents[v] = el.innerHTML;
+            const contentEl = document.getElementById(`content-${v}`);
+            if(contentEl) prevContents[v] = contentEl.innerHTML;
         });
 
         wrapper.innerHTML = '';
-        btnContainer.innerHTML = '';
 
         selectedVersions.forEach(v => {
-            // 버튼 생성
-            const btn = document.createElement('button');
-            btn.className = 'button btn-copy';
-            btn.textContent = `복사(${versionsMeta[v].name})`;
-            btn.onclick = () => copyContent(v);
-            btnContainer.appendChild(btn);
-
-            // 출력 패널 생성
             const pane = document.createElement('div');
             pane.id = `output-${v}`;
             pane.className = 'output-pane font-malgun';
             pane.style.fontSize = currentFontSize;
-            if(prevContents[v]) pane.innerHTML = prevContents[v];
+            
+            const meta = versionsMeta[v];
+            let labelHtml = "";
+            // 한킹, KJV 제외 다른 역본은 패널 상단에 라벨 추가
+            if (v !== 'kr' && v !== 'en') {
+                labelHtml = `<span style="font-weight:bold; margin-left:10px; color:#555;">[${meta.name}]</span>`;
+            }
+
+            let innerHTML = `
+                <div class="pane-header">
+                    <button class="button btn-copy" onclick="copyContent('${v}')" style="margin-left:0; padding:4px 10px; font-size:14px;">복사</button>
+                    ${labelHtml}
+                </div>
+                <div class="pane-content" id="content-${v}">`;
+            
+            if(prevContents[v]) {
+                innerHTML += prevContents[v];
+            }
+            innerHTML += `</div>`;
+            
+            pane.innerHTML = innerHTML;
             wrapper.appendChild(pane);
         });
 
         setTimeout(alignVerseHeights, 50);
     }
 
-    // 💡 다중 열 높이 동기화 로직
+    // 💡 패널 안의 content 영역끼리 높이 맞추기
     function alignVerseHeights() {
         if (selectedVersions.length <= 1) {
             selectedVersions.forEach(v => {
-               Array.from(document.getElementById(`output-${v}`).children).forEach(el => el.style.minHeight = 'auto');
+               const c = document.getElementById(`content-${v}`);
+               if(c) Array.from(c.children).forEach(el => el.style.minHeight = 'auto');
             });
             return;
         }
 
-        const panes = selectedVersions.map(v => document.getElementById(`output-${v}`));
-        if(panes.some(p => !p)) return;
+        const contentPanes = selectedVersions.map(v => document.getElementById(`content-${v}`));
+        if(contentPanes.some(p => !p)) return;
 
-        panes.forEach(p => {
+        contentPanes.forEach(p => {
             Array.from(p.children).forEach(el => el.style.minHeight = 'auto');
         });
 
-        const count = panes[0].children.length;
+        const count = contentPanes[0].children.length;
         for (let i = 0; i < count; i++) {
             let maxHeight = 0;
             const rowElements = [];
-            for (let j = 0; j < panes.length; j++) {
-                const el = panes[j].children[i];
+            for (let j = 0; j < contentPanes.length; j++) {
+                const el = contentPanes[j].children[i];
                 if (el) {
                     rowElements.push(el);
                     maxHeight = Math.max(maxHeight, el.getBoundingClientRect().height);
@@ -211,7 +227,6 @@
 
     window.addEventListener('resize', () => { setTimeout(alignVerseHeights, 100); });
 
-    // 💡 드래그 앤 드롭 로직
     function initDragAndDrop() {
         const lists = document.querySelectorAll('.dnd-list');
         lists.forEach(list => {
@@ -220,8 +235,9 @@
                 const afterElement = getDragAfterElement(list, e.clientY);
                 const draggable = document.querySelector('.dragging');
                 if (draggable) {
-                    if (list.id === 'selected-versions-list' && list.children.length >= 3 && !list.contains(draggable)) {
-                        return; // 최대 3개 제한
+                    // 💡 최대 4개 제한
+                    if (list.id === 'selected-versions-list' && list.children.length >= 4 && !list.contains(draggable)) {
+                        return; 
                     }
                     if (afterElement == null) {
                         list.appendChild(draggable);
@@ -273,7 +289,6 @@
             }
         });
         
-        // 정렬 순서 맞추기
         const sortedSelected = [];
         selectedVersions.forEach(v => {
             const el = selectedList.querySelector(`[data-version="${v}"]`);
@@ -288,7 +303,7 @@
         
         if (newSelected.length === 0) {
             showToast('⚠️ 최소 1개 이상의 역본을 선택해야 합니다.');
-            renderDndLists(); // 원래대로 되돌림
+            renderDndLists();
             return;
         }
 
@@ -296,7 +311,6 @@
             selectedVersions = newSelected;
             updateUIBySelectedVersions();
             
-            // 화면 갱신
             if (isSearchActive && currentSearchWord) {
                 executeSearch(document.getElementById('search-input').value.trim()); 
             } else if (currentBook && currentChapter) {
@@ -305,9 +319,9 @@
         }
     }
 
-    // 책/장 생성 로직
     function createBookButtons() {
-        const sidebar = document.getElementById('sidebar');
+        const sidebar = document.getElementById('bible-buttons-container');
+        sidebar.innerHTML = ''; // 초기화
         let currentTestament = null;
         for (let i = 0; i < bibleBooks.length; i += 3) {
             if (currentTestament === "old" && bibleBooks[i].testament === "new") {
@@ -376,15 +390,14 @@
         displayChapter(currentBook, chapter);
     }
 
-    // 💡 동적 다중 역본 장 렌더링
     function displayChapter(bookName, chapter, highlightVerses = []) {
         isSearchActive = false; 
         clearTimeout(renderTimer);
         
-        // 데이터 검증 (기본 한글킹제임스 기준)
         if (!versionsMeta['kr'].data[bookName] || !versionsMeta['kr'].data[bookName][chapter]) {
             selectedVersions.forEach(v => {
-                document.getElementById(`output-${v}`).innerHTML = `<p class="error" data-verse-id="header">데이터가 없습니다.</p>`;
+                const c = document.getElementById(`content-${v}`);
+                if(c) c.innerHTML = `<p class="error" data-verse-id="header">데이터가 없습니다.</p>`;
             });
             return;
         }
@@ -392,7 +405,8 @@
         const verseNums = Object.keys(versionsMeta['kr'].data[bookName][chapter]).map(Number).sort((a, b) => a - b);
         
         selectedVersions.forEach(v => {
-            const outPane = document.getElementById(`output-${v}`);
+            const outContent = document.getElementById(`content-${v}`);
+            if(!outContent) return;
             const meta = versionsMeta[v];
             const displayBookName = meta.isEn ? (bibleBooks.find(b => b.name === bookName)?.enName || bookName) : bookName;
             
@@ -406,7 +420,7 @@
                 
                 html += `<p data-verse-id="${uniqueId}"><span class="${verseNumClass}" style="cursor: pointer;" onclick="executeSearch('${displayBookName} ${chapter}:${verseNum}')">${verseNum}</span> ${text}</p>`;
             }
-            outPane.innerHTML = html;
+            outContent.innerHTML = html;
         });
 
         document.getElementById('output-wrapper').scrollTop = 0;
@@ -420,28 +434,37 @@
         }, 50);
     }
 
-    // 💡 검색 로직
+    // 💡 검색 로직 (다중 단어 AND/OR 처리 및 전체 하이라이트)
     function searchWord(word) {
         saveState();
         clearTimeout(renderTimer); 
         
         let results = [];
-        let totalOccurrences = 0;
         
-        const isEnglishSearch = /[a-zA-Z]/.test(word);
-        // 영어 검색이면 en, 한글이면 kr에서 먼저 검색 기준을 잡음
-        const baseVersionKey = isEnglishSearch ? 'en' : 'kr';
+        // 검색어 단어 분리
+        const words = searchMode === 'exact' ? [word] : word.split(/\s+/).filter(w => w.length > 0);
+        if (words.length === 0) return;
+
+        const isEnglishSearch = /[a-zA-Z]/.test(words[0]);
+        const baseVersionKey = isEnglishSearch && selectedVersions.includes('en') ? 'en' : selectedVersions[0];
         const targetData = versionsMeta[baseVersionKey].data;
+        const regexFlags = isCaseSensitive ? 'g' : 'gi';
         
         for (const book in targetData) {
             for (const chapter in targetData[book]) {
                 for (const verse in targetData[book][chapter]) {
                     const textTarget = targetData[book][chapter][verse];
-                    const regexFlags = isCaseSensitive ? 'g' : 'gi';
-                    const regex = new RegExp(word, regexFlags);
-                    const matches = textTarget.match(regex);
-                    if (matches) {
-                        totalOccurrences += matches.length;
+                    
+                    let isMatch = false;
+                    if (searchMode === 'exact') {
+                        isMatch = new RegExp(escapeRegExp(words[0]), regexFlags).test(textTarget);
+                    } else if (searchMode === 'and') {
+                        isMatch = words.every(w => new RegExp(escapeRegExp(w), regexFlags).test(textTarget));
+                    } else if (searchMode === 'or') {
+                        isMatch = words.some(w => new RegExp(escapeRegExp(w), regexFlags).test(textTarget));
+                    }
+
+                    if (isMatch) {
                         results.push({ book, chapter: parseInt(chapter), verse: parseInt(verse) });
                     }
                 }
@@ -450,21 +473,37 @@
         
         currentSearchResults = results;
         currentSearchWord = word;
-        currentSearchOccurrences = totalOccurrences;
         renderedResultCount = 0;
         isSearchActive = true;
         
         if (results.length === 0) {
             selectedVersions.forEach(v => {
-                document.getElementById(`output-${v}`).innerHTML = `<p class="error" data-verse-id="header">'${word}'에 대한 검색 결과가 없습니다.</p>`;
+                const c = document.getElementById(`content-${v}`);
+                if(c) c.innerHTML = `<p class="error" data-verse-id="header">'${word}'에 대한 검색 결과가 없습니다.</p>`;
             });
             return;
         }
+
+        // 결과 요약 문구 동적 생성
+        let summaryText = "";
+        if (searchMode === 'exact') {
+            // 기존 문구 유지 (발견된 횟수를 구하기가 exact일땐 쉬움)
+            const exactRegex = new RegExp(escapeRegExp(words[0]), regexFlags);
+            let totalOccurrences = 0;
+            results.forEach(r => {
+                const matchArr = targetData[r.book][r.chapter][r.verse].match(exactRegex);
+                if(matchArr) totalOccurrences += matchArr.length;
+            });
+            summaryText = `'${word}'이(가) ${results.length}개의 구절에서 총 ${totalOccurrences}번 등장합니다.`;
+        } else {
+            summaryText = `검색된 구절: 총 ${results.length}개`;
+        }
         
         selectedVersions.forEach((v, idx) => {
-            const outPane = document.getElementById(`output-${v}`);
+            const outContent = document.getElementById(`content-${v}`);
+            if(!outContent) return;
             const style = idx === 0 ? "font-size: 1.2em; font-weight: bold;" : "font-size: 1.2em; font-weight: bold; color: transparent; user-select: none;";
-            outPane.innerHTML = `<p class="search-header" data-verse-id="header" style="${style}">'${word}'이(가) ${results.length}개의 구절에서 총 ${totalOccurrences}번 등장합니다.</p>`;
+            outContent.innerHTML = `<p class="search-header" data-verse-id="header" style="${style}">${summaryText}</p>`;
         });
         
         document.getElementById('output-wrapper').scrollTop = 0;
@@ -483,17 +522,22 @@
         
         const chunkEnd = renderAll ? currentSearchResults.length : Math.min(renderedResultCount + RENDER_CHUNK_SIZE, currentSearchResults.length);
         const regexFlags = isCaseSensitive ? 'g' : 'gi';
-        const regex = new RegExp(currentSearchWord, regexFlags);
+        
+        const words = searchMode === 'exact' ? [currentSearchWord] : currentSearchWord.split(/\s+/).filter(w => w.length > 0);
+        const highlightRegex = new RegExp('(' + words.map(escapeRegExp).join('|') + ')', regexFlags);
         
         selectedVersions.forEach(v => {
-            const outPane = document.getElementById(`output-${v}`);
+            const outContent = document.getElementById(`content-${v}`);
+            if(!outContent) return;
             const meta = versionsMeta[v];
             let html = "";
             
             for (let idx = renderedResultCount; idx < chunkEnd; idx++) {
                 const { book, chapter, verse } = currentSearchResults[idx];
                 const text = meta.data[book]?.[chapter]?.[verse] || "";
-                const highlighted = text.replace(regex, match => `<span class="highlight">${match}</span>`);
+                
+                // 검색된 모든 단어 동시 하이라이트
+                const highlighted = text.replace(highlightRegex, match => `<span class="highlight">${match}</span>`);
                 
                 const bookObj = bibleBooks.find(b => b.name === book);
                 const displayBook = meta.isEn ? (bookObj?.enName || book) : book;
@@ -512,7 +556,7 @@
                 }
                 html += p;
             }
-            outPane.insertAdjacentHTML('beforeend', html);
+            outContent.insertAdjacentHTML('beforeend', html);
         });
         
         renderedResultCount = chunkEnd;
@@ -523,7 +567,10 @@
         document.getElementById('search-input').value = rawQuery;
         let query = rawQuery.trim();
         if (!query) {
-            selectedVersions.forEach(v => { document.getElementById(`output-${v}`).innerHTML = `<p class="error" data-verse-id="header">검색할 단어나 구절을 입력해주세요.</p>`; });
+            selectedVersions.forEach(v => { 
+                const c = document.getElementById(`content-${v}`);
+                if(c) c.innerHTML = `<p class="error" data-verse-id="header">검색할 단어나 구절을 입력해주세요.</p>`; 
+            });
             return;
         }
         document.getElementById('navigation-buttons').classList.add('hidden');
@@ -556,14 +603,20 @@
             let bookObj = bibleBooks.find(b => clean(b.name) === cleanBookRaw || clean(b.abbr) === cleanBookRaw || clean(b.enName) === cleanBookRaw || clean(b.enAbbr) === cleanBookRaw || clean(b.enName).startsWith(cleanBookRaw));
             
             if (!bookObj) {
-                selectedVersions.forEach(v => document.getElementById(`output-${v}`).innerHTML = `<p class="error" data-verse-id="header">잘못된 책 이름입니다: ${bookRaw}</p>`);
+                selectedVersions.forEach(v => {
+                    const c = document.getElementById(`content-${v}`);
+                    if(c) c.innerHTML = `<p class="error" data-verse-id="header">잘못된 책 이름입니다: ${bookRaw}</p>`;
+                });
                 return;
             }
 
             const book = bookObj.name;
             const chapterData = versionsMeta['kr'].data[book]?.[chapter];
             if (!chapterData) {
-                selectedVersions.forEach(v => document.getElementById(`output-${v}`).innerHTML = `<p class="error" data-verse-id="header">존재하지 않는 장: ${bookObj.name} ${chapter}장</p>`);
+                selectedVersions.forEach(v => {
+                    const c = document.getElementById(`content-${v}`);
+                    if(c) c.innerHTML = `<p class="error" data-verse-id="header">존재하지 않는 장: ${bookObj.name} ${chapter}장</p>`;
+                });
                 return;
             }
 
@@ -590,12 +643,16 @@
 
     function displayVerseResults(verses, verseGroups = null) {
         if (!verses || verses.length === 0) {
-            selectedVersions.forEach(v => document.getElementById(`output-${v}`).innerHTML = '<p class="error" data-verse-id="header">검색 결과가 없습니다.</p>');
+            selectedVersions.forEach(v => {
+                const c = document.getElementById(`content-${v}`);
+                if(c) c.innerHTML = '<p class="error" data-verse-id="header">검색 결과가 없습니다.</p>';
+            });
             return;
         }
 
         selectedVersions.forEach((v, vIndex) => {
-            const outPane = document.getElementById(`output-${v}`);
+            const outContent = document.getElementById(`content-${v}`);
+            if(!outContent) return;
             const meta = versionsMeta[v];
             let html = "";
 
@@ -666,7 +723,7 @@
                     html += p;
                 });
             }
-            outPane.innerHTML = html;
+            outContent.innerHTML = html;
         });
 
         document.getElementById('output-wrapper').scrollTop = 0; 
@@ -685,10 +742,11 @@
     }
 
     function setupEventListeners() {
-        const settingsModal = document.getElementById('settings-modal');
-        document.getElementById('settings-open-btn').addEventListener('click', () => { settingsModal.classList.remove('hidden'); });
-        document.getElementById('settings-close-btn').addEventListener('click', () => { settingsModal.classList.add('hidden'); });
-        window.addEventListener('click', (e) => { if (e.target === settingsModal) settingsModal.classList.add('hidden'); });
+        // 💡 사이드바 설정 토글
+        document.getElementById('sidebar-settings-btn').addEventListener('click', () => {
+            const panel = document.getElementById('sidebar-settings-panel');
+            panel.classList.toggle('hidden');
+        });
 
         document.getElementById('case-sensitive-checkbox').addEventListener('change', (e) => {
             isCaseSensitive = e.target.checked;
@@ -700,6 +758,12 @@
         });
 
         document.getElementById('format-dropdown').addEventListener('change', (e) => changeDisplayMode(e.target.value));
+        
+        // 💡 검색 모드 드롭다운 이벤트
+        document.getElementById('search-mode-dropdown').addEventListener('change', (e) => {
+            searchMode = e.target.value;
+            if (isSearchActive && currentSearchWord) executeSearch(document.getElementById('search-input').value.trim()); 
+        });
 
         document.getElementById('search-button').addEventListener('click', () => {
             const query = document.getElementById('search-input').value.trim();
@@ -806,11 +870,14 @@
     function saveState() {
         if (isRestoring) return;
         const htmlState = {};
-        selectedVersions.forEach(v => { htmlState[v] = document.getElementById(`output-${v}`).innerHTML; });
+        selectedVersions.forEach(v => { 
+            const c = document.getElementById(`content-${v}`);
+            if(c) htmlState[v] = c.innerHTML; 
+        });
         
         historyStack.push({
             book: currentBook, chapter: currentChapter, verse: currentVerse,
-            displayMode: displayMode, isCaseSensitive: isCaseSensitive,
+            displayMode: displayMode, isCaseSensitive: isCaseSensitive, searchMode: searchMode,
             query: document.getElementById('search-input').value,
             selected: [...selectedVersions],
             html: htmlState
@@ -823,10 +890,13 @@
         if (historyStack.length === 0) return;
         isRestoring = true;
         const htmlState = {};
-        selectedVersions.forEach(v => { htmlState[v] = document.getElementById(`output-${v}`).innerHTML; });
+        selectedVersions.forEach(v => { 
+            const c = document.getElementById(`content-${v}`);
+            if(c) htmlState[v] = c.innerHTML; 
+        });
         redoStack.push({
             book: currentBook, chapter: currentChapter, verse: currentVerse, 
-            displayMode: displayMode, isCaseSensitive: isCaseSensitive,
+            displayMode: displayMode, isCaseSensitive: isCaseSensitive, searchMode: searchMode,
             query: document.getElementById('search-input').value,
             selected: [...selectedVersions], html: htmlState
         });
@@ -838,10 +908,13 @@
         if (redoStack.length === 0) return;
         isRestoring = true;
         const htmlState = {};
-        selectedVersions.forEach(v => { htmlState[v] = document.getElementById(`output-${v}`).innerHTML; });
+        selectedVersions.forEach(v => { 
+            const c = document.getElementById(`content-${v}`);
+            if(c) htmlState[v] = c.innerHTML; 
+        });
         historyStack.push({
             book: currentBook, chapter: currentChapter, verse: currentVerse, 
-            displayMode: displayMode, isCaseSensitive: isCaseSensitive,
+            displayMode: displayMode, isCaseSensitive: isCaseSensitive, searchMode: searchMode,
             query: document.getElementById('search-input').value,
             selected: [...selectedVersions], html: htmlState
         });
@@ -852,6 +925,7 @@
     function restoreState(state) {
         currentBook = state.book; currentChapter = state.chapter; currentVerse = state.verse;
         displayMode = state.displayMode; isCaseSensitive = state.isCaseSensitive || false;
+        searchMode = state.searchMode || 'exact';
         
         if (JSON.stringify(selectedVersions) !== JSON.stringify(state.selected)) {
             selectedVersions = [...state.selected];
@@ -861,11 +935,12 @@
 
         document.getElementById('search-input').value = state.query;
         document.getElementById('format-dropdown').value = displayMode;
+        document.getElementById('search-mode-dropdown').value = searchMode;
         document.getElementById('case-sensitive-checkbox').checked = isCaseSensitive;
 
         selectedVersions.forEach(v => {
-            const pane = document.getElementById(`output-${v}`);
-            if(pane && state.html[v]) pane.innerHTML = state.html[v];
+            const contentEl = document.getElementById(`content-${v}`);
+            if(contentEl && state.html[v]) contentEl.innerHTML = state.html[v];
         });
 
         document.querySelectorAll('.book-button').forEach(btn => {
@@ -889,6 +964,7 @@
         setTimeout(alignVerseHeights, 10);
     }
 
+    // 복사 기능 시 헤더 등은 무시하고 실제 텍스트 내용만 파싱
     function prepareContentForCopy(outputElement) {
         const clone = outputElement.cloneNode(true);
         clone.querySelectorAll('br').forEach(br => {
@@ -896,7 +972,7 @@
             br.parentNode.replaceChild(newline, br);
         });
         const firstP = clone.querySelector('p');
-        if (firstP && firstP.textContent.includes('구절에서 총') && firstP.textContent.includes('등장')) firstP.remove();
+        if (firstP && firstP.textContent.includes('구절에서 총') || (firstP && firstP.textContent.includes('검색된 구절:'))) firstP.remove();
         
         const highlights = clone.querySelectorAll('.highlight');
         highlights.forEach(h => h.outerHTML = h.textContent);
@@ -915,16 +991,38 @@
         if (isSearchActive) {
             clearTimeout(renderTimer); 
             renderedResultCount = 0;
+            
+            let summaryText = "";
+            if (searchMode === 'exact') {
+                const words = [currentSearchWord];
+                const regexFlags = isCaseSensitive ? 'g' : 'gi';
+                const exactRegex = new RegExp(escapeRegExp(words[0]), regexFlags);
+                let totalOccurrences = 0;
+                
+                const isEnglishSearch = /[a-zA-Z]/.test(words[0]);
+                const baseVersionKey = isEnglishSearch && selectedVersions.includes('en') ? 'en' : selectedVersions[0];
+                const targetData = versionsMeta[baseVersionKey].data;
+
+                currentSearchResults.forEach(r => {
+                    const matchArr = targetData[r.book][r.chapter][r.verse].match(exactRegex);
+                    if(matchArr) totalOccurrences += matchArr.length;
+                });
+                summaryText = `'${currentSearchWord}'이(가) ${currentSearchResults.length}개의 구절에서 총 ${totalOccurrences}번 등장합니다.`;
+            } else {
+                summaryText = `검색된 구절: 총 ${currentSearchResults.length}개`;
+            }
+
             selectedVersions.forEach((v, idx) => {
                 const style = idx === 0 ? "font-size: 1.2em; font-weight: bold;" : "font-size: 1.2em; font-weight: bold; color: transparent; user-select: none;";
-                document.getElementById(`output-${v}`).innerHTML = `<p class="search-header" data-verse-id="header" style="${style}">'${currentSearchWord}'이(가) ${currentSearchResults.length}개의 구절에서 총 ${currentSearchOccurrences}번 등장합니다.</p>`;
+                const c = document.getElementById(`content-${v}`);
+                if(c) c.innerHTML = `<p class="search-header" data-verse-id="header" style="${style}">${summaryText}</p>`;
             });
             document.getElementById('output-wrapper').scrollTop = 0;
             renderNextSearchChunk();
             renderTimer = setTimeout(autoRenderRemaining, 40);
         } else {
             const query = document.getElementById('search-input').value;
-            const outputHTML = document.getElementById(`output-${selectedVersions[0]}`).innerHTML;
+            const outputHTML = document.getElementById(`content-${selectedVersions[0]}`)?.innerHTML || "";
             if (outputHTML.includes('data-verses') || outputHTML.includes('data-verse-id')) {
                 if (query.trim()) executeSearch(query);
             } else if (currentBook && currentChapter) {
@@ -949,14 +1047,14 @@
         }, 2000);
     }
 
-    // 💡 복사 버튼 로직 (동적으로 전달된 버전 ID 사용)
     function copyContent(versionKey) {
         if (isSearchActive && renderedResultCount < currentSearchResults.length) {
             clearTimeout(renderTimer); 
             renderNextSearchChunk(true); 
         }
 
-        const output = document.getElementById(`output-${versionKey}`);
+        // 💡 실제 텍스트가 담긴 content 요소 참조
+        const output = document.getElementById(`content-${versionKey}`);
         if (!output || output.innerText.trim() === '') {
             showToast('⚠️ 복사할 내용이 없습니다.');
             return;
