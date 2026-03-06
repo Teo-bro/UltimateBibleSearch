@@ -33,7 +33,6 @@ body { margin: 0; padding: 20px; display: flex; flex-direction: column; height: 
 .controls-container { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; }
 .navigation-buttons { display: flex; gap: 10px; }
 
-/* 💡 사이드바 설정창 스타일 */
 #sidebar-settings-panel { margin-bottom: 15px; border: 1px solid #ccc; padding: 10px; border-radius: 4px; background: #f9f9f9; font-size: 13px; }
 .setting-item { margin-bottom: 15px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px dashed #ddd; padding-bottom: 10px; }
 .setting-item label { font-weight: bold; color: #555; }
@@ -42,7 +41,6 @@ body { margin: 0; padding: 20px; display: flex; flex-direction: column; height: 
 .btn-size { padding: 4px 0; flex: 1; background-color: #f0f0f0; color: #333; border: 1px solid #ccc; font-weight: normal; font-size: 12px; min-width: 45%; }
 .btn-size.active { background-color: #4285f4; color: white; border-color: #3367d6; font-weight: bold; }
 
-/* 💡 세로형 드래그 앤 드롭 스타일 */
 .dnd-wrapper-vertical { display: flex; flex-direction: column; gap: 10px; }
 .dnd-column { background-color: #fff; border: 1px solid #e0e0e0; border-radius: 4px; padding: 6px; }
 .dnd-column h4 { margin: 0 0 6px 0; font-size: 12px; text-align: center; color: #666; background: #eee; padding: 4px; border-radius: 3px; }
@@ -55,14 +53,14 @@ body { margin: 0; padding: 20px; display: flex; flex-direction: column; height: 
 .output-pane { flex: 1; min-width: 0; border: 1px solid #ddd; border-radius: 4px; padding: 10px 15px; background-color: #fdfdfd; height: fit-content; min-height: 100%; font-size: 16px; }
 .hidden { display: none !important; }
 
-/* 💡 패널 헤더 (복사 버튼 + 이름 영역) */
 .pane-header { display: flex; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #eee; }
 
 .pane-content p { margin: 8px 0; line-height: 1.6; }
 .chapter-title { color: blue; }
 .verse-number { color: blue; }
 .reference { color: blue; cursor: pointer; }
-.highlight { background-color: yellow; font-weight: bold; }
+/* 💡 굵은 글씨 삭제하고 배경색만 유지 */
+.highlight { background-color: yellow; }
 .verse-highlight { background-color: yellow; }
 .error { color: red; }
 
