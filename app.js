@@ -1,13 +1,19 @@
 // 전역 변수
-    const bibleData = {}; 
-    const bibleDataEn = {}; 
+    const versionsMeta = {
+        'kr': { file: 'bible_data.json', name: '한글킹제임스', abbr: '한킹', isEn: false, data: {} },
+        'en': { file: 'bible_data_en.json', name: 'KJV', abbr: 'KJV', isEn: true, data: {} },
+        'hjy': { file: 'bible_data_hjy.json', name: '흠정역', abbr: '흠정', isEn: false, data: {} },
+        'krv': { file: 'bible_data_krv.json', name: '개역한글', abbr: '개역', isEn: false, data: {} },
+        'krv2': { file: 'bible_data_krv2.json', name: '개역개정', abbr: '개정', isEn: false, data: {} }
+    };
+    let selectedVersions = ['kr', 'en']; // 기본값 2개 선택
+
     let currentBook = null; 
     let currentChapter = null; 
     let currentVerse = null; 
     let displayMode = "standard"; 
-    let languageMode = "kr"; 
     let isCaseSensitive = false; 
-    let currentFontSize = "16px"; // 💡 글자 크기 상태 추가
+    let currentFontSize = "16px"; 
     let toastTimeout; 
 
     // 타임 로딩 변수
@@ -23,7 +29,7 @@
     let redoStack = [];    
     let isRestoring = false; 
     
-    // 성경 책 정보
+    // 성경 책 정보 (기존과 동일)
     const bibleBooks = [
         { name: "창세기", abbr: "창", enName: "Genesis", enAbbr: "Gen", chapters: 50, testament: "old" },
         { name: "출애굽기", abbr: "출", enName: "Exodus", enAbbr: "Exod", chapters: 40, testament: "old" },
@@ -94,93 +100,212 @@
     ];
 
     const abbrToName = {};
-    bibleBooks.forEach(book => abbrToName[book.abbr] = book.name);
     const nameToAbbr = {};
-    bibleBooks.forEach(book => nameToAbbr[book.name] = book.abbr);
     const bookToChapters = {};
     bibleBooks.forEach(book => {
+        abbrToName[book.abbr] = book.name;
+        nameToAbbr[book.name] = book.abbr;
         bookToChapters[book.name] = book.chapters;
         bookToChapters[book.abbr] = book.chapters;
     });
 
     document.addEventListener('DOMContentLoaded', () => {
-        document.getElementById('output-kr').innerHTML = '<p data-verse-id="header">데이터를 불러오는 중입니다...</p>';
+        // 모든 JSON 파일 로드
+        const fetchPromises = Object.keys(versionsMeta).map(key => 
+            fetch(versionsMeta[key].file)
+                .then(res => res.json())
+                .then(data => {
+                    data.forEach(item => {
+                        let bookName = item.book;
+                        // 영어 역본인 경우 한국어 책 이름으로 정규화하여 저장
+                        if (versionsMeta[key].isEn) {
+                            const bookObj = bibleBooks.find(b => b.enName.toLowerCase() === item.book.toLowerCase() || b.name === item.book);
+                            if(bookObj) bookName = bookObj.name;
+                        }
+                        if (!versionsMeta[key].data[bookName]) versionsMeta[key].data[bookName] = {};
+                        if (!versionsMeta[key].data[bookName][item.chapter]) versionsMeta[key].data[bookName][item.chapter] = {};
+                        versionsMeta[key].data[bookName][item.chapter][item.verse] = item.text;
+                    });
+                })
+                .catch(err => console.error(`${versionsMeta[key].file} 로드 실패:`, err))
+        );
 
-        Promise.all([
-            fetch('bible_data.json').then(res => res.json()),
-            fetch('bible_data_en.json').then(res => res.json())
-        ])
-        .then(([krData, enData]) => {
-            krData.forEach(item => {
-                const book = item.book;
-                if (!bibleData[book]) bibleData[book] = {};
-                if (!bibleData[book][item.chapter]) bibleData[book][item.chapter] = {};
-                bibleData[book][item.chapter][item.verse] = item.text;
-            });
-
-            enData.forEach(item => {
-                const enName = item.book;
-                const bookObj = bibleBooks.find(b => b.enName.toLowerCase() === enName.toLowerCase() || b.name === enName);
-                const bookName = bookObj ? bookObj.name : enName;
-                
-                if (!bibleDataEn[bookName]) bibleDataEn[bookName] = {};
-                if (!bibleDataEn[bookName][item.chapter]) bibleDataEn[bookName][item.chapter] = {};
-                bibleDataEn[bookName][item.chapter][item.verse] = item.text;
-            });
-
-            document.getElementById('output-kr').innerHTML = ''; 
+        Promise.all(fetchPromises).then(() => {
+            document.getElementById('output-wrapper').innerHTML = ''; 
             createBookButtons();
+            initDragAndDrop(); // 드래그 앤 드롭 초기화
+            updateUIBySelectedVersions(); // 복사 버튼 및 패널 생성
             setupEventListeners();
             loadInitialData();
             document.getElementById('format-dropdown').value = displayMode;
-        })
-        .catch(error => {
-            console.error('데이터를 불러오는데 실패했습니다:', error);
-            document.getElementById('output-kr').innerHTML = '<p class="error" data-verse-id="header">데이터를 불러오지 못했습니다. 파일 위치를 확인해주세요.</p>';
         });
     });
 
-    function alignVerseHeights() {
-        const krElements = document.querySelectorAll('#output-kr [data-verse-id]');
-        const enElements = document.querySelectorAll('#output-en [data-verse-id]');
+    // 💡 선택된 역본에 따라 복사버튼 및 출력 패널 생성
+    function updateUIBySelectedVersions() {
+        const wrapper = document.getElementById('output-wrapper');
+        const btnContainer = document.getElementById('copy-buttons-container');
         
-        if (languageMode !== 'kren') {
-            krElements.forEach(el => el.style.minHeight = 'auto');
-            enElements.forEach(el => el.style.minHeight = 'auto');
+        // 검색중 텍스트 유실 방지를 위한 임시 저장
+        const prevContents = {};
+        selectedVersions.forEach(v => {
+            const el = document.getElementById(`output-${v}`);
+            if(el) prevContents[v] = el.innerHTML;
+        });
+
+        wrapper.innerHTML = '';
+        btnContainer.innerHTML = '';
+
+        selectedVersions.forEach(v => {
+            // 버튼 생성
+            const btn = document.createElement('button');
+            btn.className = 'button btn-copy';
+            btn.textContent = `복사(${versionsMeta[v].name})`;
+            btn.onclick = () => copyContent(v);
+            btnContainer.appendChild(btn);
+
+            // 출력 패널 생성
+            const pane = document.createElement('div');
+            pane.id = `output-${v}`;
+            pane.className = 'output-pane font-malgun';
+            pane.style.fontSize = currentFontSize;
+            if(prevContents[v]) pane.innerHTML = prevContents[v];
+            wrapper.appendChild(pane);
+        });
+
+        setTimeout(alignVerseHeights, 50);
+    }
+
+    // 💡 다중 열 높이 동기화 로직
+    function alignVerseHeights() {
+        if (selectedVersions.length <= 1) {
+            selectedVersions.forEach(v => {
+               Array.from(document.getElementById(`output-${v}`).children).forEach(el => el.style.minHeight = 'auto');
+            });
             return;
         }
 
-        krElements.forEach(el => el.style.minHeight = 'auto');
-        enElements.forEach(el => el.style.minHeight = 'auto');
+        const panes = selectedVersions.map(v => document.getElementById(`output-${v}`));
+        if(panes.some(p => !p)) return;
 
-        const maxHeights = [];
-        for (let i = 0; i < krElements.length; i++) {
-            const krEl = krElements[i];
-            const enEl = enElements[i]; 
-            
-            if (krEl && enEl) {
-                const krHeight = krEl.getBoundingClientRect().height;
-                const enHeight = enEl.getBoundingClientRect().height;
-                maxHeights.push(Math.max(krHeight, enHeight));
-            } else {
-                maxHeights.push(0);
-            }
-        }
+        panes.forEach(p => {
+            Array.from(p.children).forEach(el => el.style.minHeight = 'auto');
+        });
 
-        for (let i = 0; i < krElements.length; i++) {
-            if (maxHeights[i] > 0) {
-                krElements[i].style.minHeight = `${maxHeights[i]}px`;
-                if (enElements[i]) {
-                    enElements[i].style.minHeight = `${maxHeights[i]}px`;
+        const count = panes[0].children.length;
+        for (let i = 0; i < count; i++) {
+            let maxHeight = 0;
+            const rowElements = [];
+            for (let j = 0; j < panes.length; j++) {
+                const el = panes[j].children[i];
+                if (el) {
+                    rowElements.push(el);
+                    maxHeight = Math.max(maxHeight, el.getBoundingClientRect().height);
                 }
+            }
+            if (maxHeight > 0) {
+                rowElements.forEach(el => el.style.minHeight = `${maxHeight}px`);
             }
         }
     }
 
-    window.addEventListener('resize', () => {
-        setTimeout(alignVerseHeights, 100);
-    });
+    window.addEventListener('resize', () => { setTimeout(alignVerseHeights, 100); });
 
+    // 💡 드래그 앤 드롭 로직
+    function initDragAndDrop() {
+        const lists = document.querySelectorAll('.dnd-list');
+        lists.forEach(list => {
+            list.addEventListener('dragover', e => {
+                e.preventDefault();
+                const afterElement = getDragAfterElement(list, e.clientY);
+                const draggable = document.querySelector('.dragging');
+                if (draggable) {
+                    if (list.id === 'selected-versions-list' && list.children.length >= 3 && !list.contains(draggable)) {
+                        return; // 최대 3개 제한
+                    }
+                    if (afterElement == null) {
+                        list.appendChild(draggable);
+                    } else {
+                        list.insertBefore(draggable, afterElement);
+                    }
+                }
+            });
+        });
+        renderDndLists();
+    }
+
+    function getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('.dnd-item:not(.dragging)')];
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    function renderDndLists() {
+        const selectedList = document.getElementById('selected-versions-list');
+        const availableList = document.getElementById('available-versions-list');
+        selectedList.innerHTML = '';
+        availableList.innerHTML = '';
+
+        Object.keys(versionsMeta).forEach(vKey => {
+            const li = document.createElement('li');
+            li.className = 'dnd-item';
+            li.draggable = true;
+            li.dataset.version = vKey;
+            li.textContent = versionsMeta[vKey].name;
+            
+            li.addEventListener('dragstart', () => li.classList.add('dragging'));
+            li.addEventListener('dragend', () => {
+                li.classList.remove('dragging');
+                updateSelectedVersionsFromUI();
+            });
+
+            if (selectedVersions.includes(vKey)) {
+                selectedList.appendChild(li);
+            } else {
+                availableList.appendChild(li);
+            }
+        });
+        
+        // 정렬 순서 맞추기
+        const sortedSelected = [];
+        selectedVersions.forEach(v => {
+            const el = selectedList.querySelector(`[data-version="${v}"]`);
+            if(el) { sortedSelected.push(el); el.remove(); }
+        });
+        sortedSelected.forEach(el => selectedList.appendChild(el));
+    }
+
+    function updateSelectedVersionsFromUI() {
+        const selectedList = document.getElementById('selected-versions-list');
+        const newSelected = [...selectedList.children].map(li => li.dataset.version);
+        
+        if (newSelected.length === 0) {
+            showToast('⚠️ 최소 1개 이상의 역본을 선택해야 합니다.');
+            renderDndLists(); // 원래대로 되돌림
+            return;
+        }
+
+        if (JSON.stringify(newSelected) !== JSON.stringify(selectedVersions)) {
+            selectedVersions = newSelected;
+            updateUIBySelectedVersions();
+            
+            // 화면 갱신
+            if (isSearchActive && currentSearchWord) {
+                executeSearch(document.getElementById('search-input').value.trim()); 
+            } else if (currentBook && currentChapter) {
+                displayChapter(currentBook, currentChapter, currentVerse ? [currentVerse] : []);
+            }
+        }
+    }
+
+    // 책/장 생성 로직
     function createBookButtons() {
         const sidebar = document.getElementById('sidebar');
         let currentTestament = null;
@@ -251,51 +376,51 @@
         displayChapter(currentBook, chapter);
     }
 
-    // 💡 읽기 모드의 구절 양식은 업로드하신 원본 파일과 똑같이 ${verseNum}만 나오게 되돌렸습니다.
+    // 💡 동적 다중 역본 장 렌더링
     function displayChapter(bookName, chapter, highlightVerses = []) {
         isSearchActive = false; 
         clearTimeout(renderTimer);
         
-        if (!bibleData[bookName] || !bibleData[bookName][chapter]) {
-            document.getElementById('output-kr').innerHTML = `<p class="error" data-verse-id="header">${bookName} ${chapter}장 데이터가 없습니다.</p>`;
-            document.getElementById('output-en').innerHTML = '<p class="error" data-verse-id="header"></p>';
+        // 데이터 검증 (기본 한글킹제임스 기준)
+        if (!versionsMeta['kr'].data[bookName] || !versionsMeta['kr'].data[bookName][chapter]) {
+            selectedVersions.forEach(v => {
+                document.getElementById(`output-${v}`).innerHTML = `<p class="error" data-verse-id="header">데이터가 없습니다.</p>`;
+            });
             return;
         }
         
-        const verses = bibleData[bookName][chapter];
-        const versesEn = (bibleDataEn[bookName] && bibleDataEn[bookName][chapter]) ? bibleDataEn[bookName][chapter] : {};
-        const enBookName = bibleBooks.find(b => b.name === bookName)?.enName || bookName;
+        const verseNums = Object.keys(versionsMeta['kr'].data[bookName][chapter]).map(Number).sort((a, b) => a - b);
         
-        let outputKr = `<h2 class="chapter-title" data-verse-id="header">${bookName} ${chapter}${bookName==="시편"?"편":"장"}</h2>`;
-        let outputEn = `<h2 class="chapter-title" data-verse-id="header">${enBookName} ${chapter}</h2>`;
-        
-        const verseNums = Object.keys(verses).map(Number).sort((a, b) => a - b);
-        for (const verseNum of verseNums) {
-            const verseTextKr = verses[verseNum];
-            const verseTextEn = versesEn[verseNum] || "";
-            const isHighlighted = highlightVerses.includes(verseNum);
-            const verseNumClass = isHighlighted ? 'verse-number verse-highlight' : 'verse-number';
-            const uniqueId = `verse-${bookName}-${chapter}-${verseNum}`;
+        selectedVersions.forEach(v => {
+            const outPane = document.getElementById(`output-${v}`);
+            const meta = versionsMeta[v];
+            const displayBookName = meta.isEn ? (bibleBooks.find(b => b.name === bookName)?.enName || bookName) : bookName;
             
-            outputKr += `<p data-verse-id="${uniqueId}"><span class="${verseNumClass}" style="cursor: pointer;" onclick="executeSearch('${bookName} ${chapter}:${verseNum}')" title="${bookName} ${chapter}:${verseNum} 출력 모드로 보기">${verseNum}</span> ${verseTextKr}</p>`;
-            outputEn += `<p data-verse-id="${uniqueId}"><span class="${verseNumClass}" style="cursor: pointer;" onclick="executeSearch('${enBookName} ${chapter}:${verseNum}')" title="${enBookName} ${chapter}:${verseNum} View">${verseNum}</span> ${verseTextEn}</p>`;
-        }
-        
-        document.getElementById('output-kr').innerHTML = outputKr;
-        document.getElementById('output-en').innerHTML = outputEn;
+            let html = `<h2 class="chapter-title" data-verse-id="header">${displayBookName} ${chapter}${meta.isEn ? "" : (bookName==="시편"?"편":"장")}</h2>`;
+            
+            for (const verseNum of verseNums) {
+                const text = meta.data[bookName]?.[chapter]?.[verseNum] || "";
+                const isHighlighted = highlightVerses.includes(verseNum);
+                const verseNumClass = isHighlighted ? 'verse-number verse-highlight' : 'verse-number';
+                const uniqueId = `verse-${bookName}-${chapter}-${verseNum}`;
+                
+                html += `<p data-verse-id="${uniqueId}"><span class="${verseNumClass}" style="cursor: pointer;" onclick="executeSearch('${displayBookName} ${chapter}:${verseNum}')">${verseNum}</span> ${text}</p>`;
+            }
+            outPane.innerHTML = html;
+        });
+
         document.getElementById('output-wrapper').scrollTop = 0;
         
         setTimeout(() => {
             alignVerseHeights();
             if (highlightVerses.length > 0) {
                 const firstHighlight = document.querySelector('.verse-highlight');
-                if (firstHighlight) {
-                    firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
+                if (firstHighlight) firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }, 50);
     }
 
+    // 💡 검색 로직
     function searchWord(word) {
         saveState();
         clearTimeout(renderTimer); 
@@ -304,7 +429,9 @@
         let totalOccurrences = 0;
         
         const isEnglishSearch = /[a-zA-Z]/.test(word);
-        const targetData = isEnglishSearch ? bibleDataEn : bibleData;
+        // 영어 검색이면 en, 한글이면 kr에서 먼저 검색 기준을 잡음
+        const baseVersionKey = isEnglishSearch ? 'en' : 'kr';
+        const targetData = versionsMeta[baseVersionKey].data;
         
         for (const book in targetData) {
             for (const chapter in targetData[book]) {
@@ -315,11 +442,7 @@
                     const matches = textTarget.match(regex);
                     if (matches) {
                         totalOccurrences += matches.length;
-                        results.push({
-                            book, chapter: parseInt(chapter), verse: parseInt(verse),
-                            textKr: bibleData[book]?.[chapter]?.[verse] || "",
-                            textEn: bibleDataEn[book]?.[chapter]?.[verse] || ""
-                        });
+                        results.push({ book, chapter: parseInt(chapter), verse: parseInt(verse) });
                     }
                 }
             }
@@ -331,20 +454,20 @@
         renderedResultCount = 0;
         isSearchActive = true;
         
-        const outputKrDiv = document.getElementById('output-kr');
-        const outputEnDiv = document.getElementById('output-en');
-        
         if (results.length === 0) {
-            outputKrDiv.innerHTML = `<p class="error" data-verse-id="header">'${word}'에 대한 검색 결과가 없습니다.</p>`;
-            outputEnDiv.innerHTML = '<p class="error" data-verse-id="header"></p>';
+            selectedVersions.forEach(v => {
+                document.getElementById(`output-${v}`).innerHTML = `<p class="error" data-verse-id="header">'${word}'에 대한 검색 결과가 없습니다.</p>`;
+            });
             return;
         }
         
-        outputKrDiv.innerHTML = `<p class="search-header" data-verse-id="header" style="font-size: 1.2em; font-weight: bold;">'${word}'이(가) ${results.length}개의 구절에서 총 ${totalOccurrences}번 등장합니다.</p>`;
-        outputEnDiv.innerHTML = `<p class="search-header" data-verse-id="header" style="font-size: 1.2em; font-weight: bold; color: transparent; user-select: none;">'${word}'이(가) ${results.length}개의 구절에서 총 ${totalOccurrences}번 등장합니다.</p>`;
+        selectedVersions.forEach((v, idx) => {
+            const outPane = document.getElementById(`output-${v}`);
+            const style = idx === 0 ? "font-size: 1.2em; font-weight: bold;" : "font-size: 1.2em; font-weight: bold; color: transparent; user-select: none;";
+            outPane.innerHTML = `<p class="search-header" data-verse-id="header" style="${style}">'${word}'이(가) ${results.length}개의 구절에서 총 ${totalOccurrences}번 등장합니다.</p>`;
+        });
         
         document.getElementById('output-wrapper').scrollTop = 0;
-        
         renderNextSearchChunk();
         renderTimer = setTimeout(autoRenderRemaining, 40);
     }
@@ -358,67 +481,39 @@
     function renderNextSearchChunk(renderAll = false) {
         if (!isSearchActive || renderedResultCount >= currentSearchResults.length) return;
         
-        const outputKrDiv = document.getElementById('output-kr');
-        const outputEnDiv = document.getElementById('output-en');
-        
-        let outputKr = "";
-        let outputEn = "";
-        
         const chunkEnd = renderAll ? currentSearchResults.length : Math.min(renderedResultCount + RENDER_CHUNK_SIZE, currentSearchResults.length);
-        
         const regexFlags = isCaseSensitive ? 'g' : 'gi';
+        const regex = new RegExp(currentSearchWord, regexFlags);
         
-        for (let idx = renderedResultCount; idx < chunkEnd; idx++) {
-            const result = currentSearchResults[idx];
-            const { book, chapter, verse, textKr, textEn } = result;
-            const regex = new RegExp(currentSearchWord, regexFlags);
-            const highlightedKr = textKr.replace(regex, match => `<span class="highlight">${match}</span>`);
-            const highlightedEn = textEn.replace(regex, match => `<span class="highlight">${match}</span>`);
+        selectedVersions.forEach(v => {
+            const outPane = document.getElementById(`output-${v}`);
+            const meta = versionsMeta[v];
+            let html = "";
             
-            const bookObj = bibleBooks.find(b => b.name === book);
-            const enBookName = bookObj?.enName || book;
-            const enAbbr = bookObj?.enAbbr || book;
-            const abbr = nameToAbbr[book] || book;
-            const uniqueId = `search-${idx}`;
+            for (let idx = renderedResultCount; idx < chunkEnd; idx++) {
+                const { book, chapter, verse } = currentSearchResults[idx];
+                const text = meta.data[book]?.[chapter]?.[verse] || "";
+                const highlighted = text.replace(regex, match => `<span class="highlight">${match}</span>`);
+                
+                const bookObj = bibleBooks.find(b => b.name === book);
+                const displayBook = meta.isEn ? (bookObj?.enName || book) : book;
+                const displayAbbr = meta.isEn ? (bookObj?.enAbbr || book) : (nameToAbbr[book] || book);
+                const uniqueId = `search-${idx}`;
 
-            let pKr = "", pEn = "";
-
-            switch (displayMode) {
-                case 'standard':
-                    pKr = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">${book} ${chapter}:${verse}</span><br>${highlightedKr}</p>`;
-                    pEn = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">${enBookName} ${chapter}:${verse}</span><br>${highlightedEn}</p>`;
-                    break;
-                case 'abbr':
-                    pKr = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">${abbr} ${chapter}:${verse}</span> ${highlightedKr}</p>`;
-                    pEn = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">${enAbbr} ${chapter}:${verse}</span> ${highlightedEn}</p>`;
-                    break;
-                case 'quote':
-                    pKr = `<p data-verse-id="${uniqueId}">「${highlightedKr}」<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${book} ${chapter}:${verse})</span></p>`;
-                    pEn = `<p data-verse-id="${uniqueId}">「${highlightedEn}」<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${enBookName} ${chapter}:${verse})</span></p>`;
-                    break;
-                case 'short-quote': 
-                    pKr = `<p data-verse-id="${uniqueId}">「${highlightedKr}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${abbr} ${chapter}:${verse})</span></p>`;
-                    pEn = `<p data-verse-id="${uniqueId}">「${highlightedEn}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${enAbbr} ${chapter}:${verse})</span></p>`;
-                    break; 
-                case 'double-quote':
-                    pKr = `<p data-verse-id="${uniqueId}">『${highlightedKr}』<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${book} ${chapter}:${verse})</span></p>`;
-                    pEn = `<p data-verse-id="${uniqueId}">『${highlightedEn}』<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${enBookName} ${chapter}:${verse})</span></p>`;
-                    break;
-                case 'double-short-quote':
-                    pKr = `<p data-verse-id="${uniqueId}">『${highlightedKr}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${abbr} ${chapter}:${verse})</span></p>`;
-                    pEn = `<p data-verse-id="${uniqueId}">『${highlightedEn}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${enAbbr} ${chapter}:${verse})</span></p>`;
-                    break;
-                case 'sequence':
-                    pKr = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">${abbr} ${chapter}:${verse}</span> ${highlightedKr}</p>`;
-                    pEn = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">${enAbbr} ${chapter}:${verse}</span> ${highlightedEn}</p>`;
-                    break;
+                let p = "";
+                switch (displayMode) {
+                    case 'standard': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">${displayBook} ${chapter}:${verse}</span><br>${highlighted}</p>`; break;
+                    case 'abbr': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">${displayAbbr} ${chapter}:${verse}</span> ${highlighted}</p>`; break;
+                    case 'quote': p = `<p data-verse-id="${uniqueId}">「${highlighted}」<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${displayBook} ${chapter}:${verse})</span></p>`; break;
+                    case 'short-quote': p = `<p data-verse-id="${uniqueId}">「${highlighted}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${displayAbbr} ${chapter}:${verse})</span></p>`; break; 
+                    case 'double-quote': p = `<p data-verse-id="${uniqueId}">『${highlighted}』<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${displayBook} ${chapter}:${verse})</span></p>`; break;
+                    case 'double-short-quote': p = `<p data-verse-id="${uniqueId}">『${highlighted}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">(${displayAbbr} ${chapter}:${verse})</span></p>`; break;
+                    case 'sequence': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verse}">${displayAbbr} ${chapter}:${verse}</span> ${highlighted}</p>`; break;
+                }
+                html += p;
             }
-            outputKr += pKr;
-            outputEn += pEn;
-        }
-        
-        outputKrDiv.insertAdjacentHTML('beforeend', outputKr);
-        outputEnDiv.insertAdjacentHTML('beforeend', outputEn);
+            outPane.insertAdjacentHTML('beforeend', html);
+        });
         
         renderedResultCount = chunkEnd;
         setTimeout(alignVerseHeights, 10);
@@ -428,8 +523,7 @@
         document.getElementById('search-input').value = rawQuery;
         let query = rawQuery.trim();
         if (!query) {
-            document.getElementById('output-kr').innerHTML = `<p class="error" data-verse-id="header">검색할 단어나 구절을 입력해주세요.</p>`;
-            document.getElementById('output-en').innerHTML = '<p class="error" data-verse-id="header"></p>';
+            selectedVersions.forEach(v => { document.getElementById(`output-${v}`).innerHTML = `<p class="error" data-verse-id="header">검색할 단어나 구절을 입력해주세요.</p>`; });
             return;
         }
         document.getElementById('navigation-buttons').classList.add('hidden');
@@ -458,30 +552,18 @@
             let bookRaw = match[1];
             let chapter = match[2];
             let versePart = match[3];
-            
             let cleanBookRaw = clean(bookRaw);
-            let bookObj = null;
-
-            bookObj = bibleBooks.find(b => clean(b.name) === cleanBookRaw || clean(b.abbr) === cleanBookRaw);
-            if (!bookObj) {
-                bookObj = bibleBooks.find(b => {
-                    let n1 = clean(b.enName);
-                    let n2 = clean(b.enAbbr);
-                    return n1 === cleanBookRaw || n2 === cleanBookRaw || n1.startsWith(cleanBookRaw);
-                });
-            }
+            let bookObj = bibleBooks.find(b => clean(b.name) === cleanBookRaw || clean(b.abbr) === cleanBookRaw || clean(b.enName) === cleanBookRaw || clean(b.enAbbr) === cleanBookRaw || clean(b.enName).startsWith(cleanBookRaw));
             
             if (!bookObj) {
-                document.getElementById('output-kr').innerHTML = `<p class="error" data-verse-id="header">잘못된 책 이름입니다: ${bookRaw}</p>`;
-                document.getElementById('output-en').innerHTML = '<p class="error" data-verse-id="header"></p>';
+                selectedVersions.forEach(v => document.getElementById(`output-${v}`).innerHTML = `<p class="error" data-verse-id="header">잘못된 책 이름입니다: ${bookRaw}</p>`);
                 return;
             }
 
             const book = bookObj.name;
-            const chapterData = bibleData[book]?.[chapter];
+            const chapterData = versionsMeta['kr'].data[book]?.[chapter];
             if (!chapterData) {
-                document.getElementById('output-kr').innerHTML = `<p class="error" data-verse-id="header">존재하지 않는 장: ${bookObj.name} ${chapter}장</p>`;
-                document.getElementById('output-en').innerHTML = '<p class="error" data-verse-id="header"></p>';
+                selectedVersions.forEach(v => document.getElementById(`output-${v}`).innerHTML = `<p class="error" data-verse-id="header">존재하지 않는 장: ${bookObj.name} ${chapter}장</p>`);
                 return;
             }
 
@@ -490,38 +572,15 @@
             for (const part of parts) {
                 if (part.includes('-')) {
                     const [start, end] = part.split('-').map(Number);
-                    if (start > end) {
-                        document.getElementById('output-kr').innerHTML = `<p class="error" data-verse-id="header">절 순서 오류: ${part}</p>`;
-                        document.getElementById('output-en').innerHTML = '<p class="error" data-verse-id="header"></p>';
-                        return;
-                    }
+                    if (start > end) return;
                     for (let v = start; v <= end; v++) {
-                        if (!chapterData[v]) {
-                            document.getElementById('output-kr').innerHTML = `<p class="error" data-verse-id="header">존재하지 않는 절: ${bookObj.name} ${chapter}:${v}</p>`;
-                            document.getElementById('output-en').innerHTML = '<p class="error" data-verse-id="header"></p>';
-                            return;
-                        }
-                        verses.push({ book, chapter, verse: v });
+                        if (chapterData[v]) verses.push({ book, chapter, verse: v });
                     }
                 } else {
                     const v = Number(part);
-                    if (!chapterData[v]) {
-                        document.getElementById('output-kr').innerHTML = `<p class="error" data-verse-id="header">존재하지 않는 절: ${bookObj.name} ${chapter}:${v}</p>`;
-                        document.getElementById('output-en').innerHTML = '<p class="error" data-verse-id="header"></p>';
-                        return;
-                    }
-                    verses.push({ book, chapter, verse: v });
+                    if (chapterData[v]) verses.push({ book, chapter, verse: v });
                 }
             }
-
-            const verseNumbers = verses.map(v => v.verse);
-            const dupCheck = new Set(verseNumbers);
-            if (dupCheck.size !== verseNumbers.length) {
-                document.getElementById('output-kr').innerHTML = `<p class="error" data-verse-id="header">중복된 절 포함</p>`;
-                document.getElementById('output-en').innerHTML = '<p class="error" data-verse-id="header"></p>';
-                return;
-            }
-
             allGroups.push({ book, chapter: parseInt(chapter), verses });
         }
 
@@ -531,233 +590,116 @@
 
     function displayVerseResults(verses, verseGroups = null) {
         if (!verses || verses.length === 0) {
-            document.getElementById('output-kr').innerHTML = '<p class="error" data-verse-id="header">검색 결과가 없습니다.</p>';
-            document.getElementById('output-en').innerHTML = '<p class="error" data-verse-id="header"></p>';
+            selectedVersions.forEach(v => document.getElementById(`output-${v}`).innerHTML = '<p class="error" data-verse-id="header">검색 결과가 없습니다.</p>');
             return;
         }
 
-        let outputKr = "";
-        let outputEn = "";
+        selectedVersions.forEach((v, vIndex) => {
+            const outPane = document.getElementById(`output-${v}`);
+            const meta = versionsMeta[v];
+            let html = "";
 
-        if (verseGroups) {
-            verseGroups.forEach((group, groupIndex) => {
-                const { book, chapter, verses: groupVerses } = group;
-                if (groupVerses.length === 0) return;
+            if (verseGroups) {
+                verseGroups.forEach((group, groupIndex) => {
+                    const { book, chapter, verses: groupVerses } = group;
+                    if (groupVerses.length === 0) return;
 
-                const bookObj = bibleBooks.find(b => b.name === book);
-                const enBookName = bookObj?.enName || book;
-                const enAbbr = bookObj?.enAbbr || book;
-                const abbr = nameToAbbr[book] || book;
-                const verseNums = groupVerses.map(v => v.verse).sort((a, b) => a - b);
-                
-                let ranges = [], currentRange = [verseNums[0]];
-                for (let i = 1; i < verseNums.length; i++) {
-                    if (verseNums[i] === verseNums[i-1] + 1) currentRange.push(verseNums[i]);
-                    else { ranges.push(currentRange); currentRange = [verseNums[i]]; }
-                }
-                ranges.push(currentRange);
-
-                const verseRef = ranges.map(range => range.length === 1 ? range[0] : `${range[0]}-${range[range.length - 1]}`).join(',');
-                const combinedKr = groupVerses.sort((a, b) => a.verse - b.verse).map(v => bibleData[book]?.[chapter]?.[v.verse] || "").join(' ');
-                const combinedEn = groupVerses.sort((a, b) => a.verse - b.verse).map(v => bibleDataEn[book]?.[chapter]?.[v.verse] || "").join(' ');
-
-                const uniqueId = `vsearch-${groupIndex}`;
-                let pKr = "", pEn = "";
-
-                switch (displayMode) {
-                    case 'standard':
-                        pKr = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">${book} ${chapter}:${verseRef}</span><br>${combinedKr}</p>`;
-                        pEn = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">${enBookName} ${chapter}:${verseRef}</span><br>${combinedEn}</p>`;
-                        break;
-                    case 'abbr':
-                        pKr = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">${abbr} ${chapter}:${verseRef}</span> ${combinedKr}</p>`;
-                        pEn = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">${enAbbr} ${chapter}:${verseRef}</span> ${combinedEn}</p>`;
-                        break;
-                    case 'quote':
-                        pKr = `<p data-verse-id="${uniqueId}">「${combinedKr}」<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${book} ${chapter}:${verseRef})</span></p>`;
-                        pEn = `<p data-verse-id="${uniqueId}">「${combinedEn}」<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${enBookName} ${chapter}:${verseRef})</span></p>`;
-                        break;
-                    case 'short-quote': 
-                        pKr = `<p data-verse-id="${uniqueId}">「${combinedKr}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${abbr} ${chapter}:${verseRef})</span></p>`;
-                        pEn = `<p data-verse-id="${uniqueId}">「${combinedEn}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${enAbbr} ${chapter}:${verseRef})</span></p>`;
-                        break; 
-                    case 'double-quote':
-                        pKr = `<p data-verse-id="${uniqueId}">『${combinedKr}』<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${book} ${chapter}:${verseRef})</span></p>`;
-                        pEn = `<p data-verse-id="${uniqueId}">『${combinedEn}』<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${enBookName} ${chapter}:${verseRef})</span></p>`;
-                        break;
-                    case 'double-short-quote': 
-                        pKr = `<p data-verse-id="${uniqueId}">『${combinedKr}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${abbr} ${chapter}:${verseRef})</span></p>`;
-                        pEn = `<p data-verse-id="${uniqueId}">『${combinedEn}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${enAbbr} ${chapter}:${verseRef})</span></p>`;
-                        break; 
-                    case 'sequence': {
-                        let krSeq = "";
-                        let enSeq = "";
-                        groupVerses.sort((a, b) => a.verse - b.verse).forEach((v, vIdx) => {
-                            const tKr = bibleData[book]?.[chapter]?.[v.verse] || "";
-                            const tEn = bibleDataEn[book]?.[chapter]?.[v.verse] || "";
-                            if (vIdx === 0) {
-                                krSeq += `<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${v.verse}">${abbr} ${chapter}:${v.verse}</span> ${tKr}`;
-                                enSeq += `<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${v.verse}">${enAbbr} ${chapter}:${v.verse}</span> ${tEn}`;
-                            } else {
-                                krSeq += `<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${v.verse}">${chapter}:${v.verse}</span> ${tKr}`;
-                                enSeq += `<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${v.verse}">${chapter}:${v.verse}</span> ${tEn}`;
-                            }
-                        });
-                        pKr = `<p data-verse-id="${uniqueId}">${krSeq}</p>`;
-                        pEn = `<p data-verse-id="${uniqueId}">${enSeq}</p>`;
-                        break;
+                    const bookObj = bibleBooks.find(b => b.name === book);
+                    const displayBook = meta.isEn ? (bookObj?.enName || book) : book;
+                    const displayAbbr = meta.isEn ? (bookObj?.enAbbr || book) : (nameToAbbr[book] || book);
+                    const verseNums = groupVerses.map(vv => vv.verse).sort((a, b) => a - b);
+                    
+                    let ranges = [], currentRange = [verseNums[0]];
+                    for (let i = 1; i < verseNums.length; i++) {
+                        if (verseNums[i] === verseNums[i-1] + 1) currentRange.push(verseNums[i]);
+                        else { ranges.push(currentRange); currentRange = [verseNums[i]]; }
                     }
-                }
-                outputKr += pKr;
-                outputEn += pEn;
+                    ranges.push(currentRange);
 
-                if (verseGroups.length > 1 && groupIndex < verseGroups.length - 1) {
-                    outputKr += `<div style="margin: 10px 0;" data-verse-id="spacer-${groupIndex}"></div>`;
-                    outputEn += `<div style="margin: 10px 0;" data-verse-id="spacer-${groupIndex}"></div>`;
-                }
-            });
+                    const verseRef = ranges.map(range => range.length === 1 ? range[0] : `${range[0]}-${range[range.length - 1]}`).join(',');
+                    const combinedText = groupVerses.sort((a, b) => a.verse - b.verse).map(vv => meta.data[book]?.[chapter]?.[vv.verse] || "").join(' ');
 
-        } else {
-            verses.forEach((verseObj, idx) => {
-                const { book, chapter, verse: verseNum } = verseObj;
-                const textKr = bibleData[book]?.[chapter]?.[verseNum] || "";
-                const textEn = bibleDataEn[book]?.[chapter]?.[verseNum] || "";
-                const bookObj = bibleBooks.find(b => b.name === book);
-                const enBookName = bookObj?.enName || book;
-                const enAbbr = bookObj?.enAbbr || book;
-                const abbr = nameToAbbr[book] || book;
-                const uniqueId = `vs-${idx}`;
-                
-                let pKr = "", pEn = "";
+                    const uniqueId = `vsearch-${groupIndex}`;
+                    let p = "";
+                    switch (displayMode) {
+                        case 'standard': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">${displayBook} ${chapter}:${verseRef}</span><br>${combinedText}</p>`; break;
+                        case 'abbr': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">${displayAbbr} ${chapter}:${verseRef}</span> ${combinedText}</p>`; break;
+                        case 'quote': p = `<p data-verse-id="${uniqueId}">「${combinedText}」<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${displayBook} ${chapter}:${verseRef})</span></p>`; break;
+                        case 'short-quote': p = `<p data-verse-id="${uniqueId}">「${combinedText}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${displayAbbr} ${chapter}:${verseRef})</span></p>`; break; 
+                        case 'double-quote': p = `<p data-verse-id="${uniqueId}">『${combinedText}』<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${displayBook} ${chapter}:${verseRef})</span></p>`; break;
+                        case 'double-short-quote': p = `<p data-verse-id="${uniqueId}">『${combinedText}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${verseNums.join(',')}">(${displayAbbr} ${chapter}:${verseRef})</span></p>`; break; 
+                        case 'sequence': {
+                            let seq = "";
+                            groupVerses.sort((a, b) => a.verse - b.verse).forEach((vv, vIdx) => {
+                                const t = meta.data[book]?.[chapter]?.[vv.verse] || "";
+                                if (vIdx === 0) seq += `<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${vv.verse}">${displayAbbr} ${chapter}:${vv.verse}</span> ${t}`;
+                                else seq += `<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${vv.verse}">${chapter}:${vv.verse}</span> ${t}`;
+                            });
+                            p = `<p data-verse-id="${uniqueId}">${seq}</p>`;
+                            break;
+                        }
+                    }
+                    html += p;
+                    if (verseGroups.length > 1 && groupIndex < verseGroups.length - 1) {
+                        html += `<div style="margin: 10px 0;" data-verse-id="spacer-${groupIndex}"></div>`;
+                    }
+                });
+            } else {
+                verses.forEach((verseObj, idx) => {
+                    const { book, chapter, verse: verseNum } = verseObj;
+                    const text = meta.data[book]?.[chapter]?.[verseNum] || "";
+                    const bookObj = bibleBooks.find(b => b.name === book);
+                    const displayBook = meta.isEn ? (bookObj?.enName || book) : book;
+                    const displayAbbr = meta.isEn ? (bookObj?.enAbbr || book) : (nameToAbbr[book] || book);
+                    const uniqueId = `vs-${idx}`;
+                    
+                    let p = "";
+                    switch (displayMode) {
+                        case 'standard': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${displayBook} ${chapter}:${verseNum}</span><br>${text}</p>`; break;
+                        case 'abbr': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${displayAbbr} ${chapter}:${verseNum}</span> ${text}</p>`; break;
+                        case 'quote': p = `<p data-verse-id="${uniqueId}">「${text}」<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${displayBook} ${chapter}:${verseNum})</span></p>`; break;
+                        case 'short-quote': p = `<p data-verse-id="${uniqueId}">「${text}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${displayAbbr} ${chapter}:${verseNum})</span></p>`; break; 
+                        case 'double-quote': p = `<p data-verse-id="${uniqueId}">『${text}』<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${displayBook} ${chapter}:${verseNum})</span></p>`; break;
+                        case 'double-short-quote': p = `<p data-verse-id="${uniqueId}">『${text}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${displayAbbr} ${chapter}:${verseNum})</span></p>`; break; 
+                        case 'sequence': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${displayAbbr} ${chapter}:${verseNum}</span> ${text}</p>`; break;
+                    }
+                    html += p;
+                });
+            }
+            outPane.innerHTML = html;
+        });
 
-                switch (displayMode) {
-                    case 'standard':
-                        pKr = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${book} ${chapter}:${verseNum}</span><br>${textKr}</p>`;
-                        pEn = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${enBookName} ${chapter}:${verseNum}</span><br>${textEn}</p>`;
-                        break;
-                    case 'abbr':
-                        pKr = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${abbr} ${chapter}:${verseNum}</span> ${textKr}</p>`;
-                        pEn = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${enAbbr} ${chapter}:${verseNum}</span> ${textEn}</p>`;
-                        break;
-                    case 'quote':
-                        pKr = `<p data-verse-id="${uniqueId}">「${textKr}」<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${book} ${chapter}:${verseNum})</span></p>`;
-                        pEn = `<p data-verse-id="${uniqueId}">「${textEn}」<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${enBookName} ${chapter}:${verseNum})</span></p>`;
-                        break;
-                    case 'short-quote': 
-                        pKr = `<p data-verse-id="${uniqueId}">「${textKr}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${abbr} ${chapter}:${verseNum})</span></p>`;
-                        pEn = `<p data-verse-id="${uniqueId}">「${textEn}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${enAbbr} ${chapter}:${verseNum})</span></p>`;
-                        break; 
-                    case 'double-quote':
-                        pKr = `<p data-verse-id="${uniqueId}">『${textKr}』<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${book} ${chapter}:${verseNum})</span></p>`;
-                        pEn = `<p data-verse-id="${uniqueId}">『${textEn}』<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${enBookName} ${chapter}:${verseNum})</span></p>`;
-                        break;
-                    case 'double-short-quote': 
-                        pKr = `<p data-verse-id="${uniqueId}">『${textKr}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${abbr} ${chapter}:${verseNum})</span></p>`;
-                        pEn = `<p data-verse-id="${uniqueId}">『${textEn}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${enAbbr} ${chapter}:${verseNum})</span></p>`;
-                        break; 
-                    case 'sequence':
-                        pKr = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${abbr} ${chapter}:${verseNum}</span> ${textKr}</p>`;
-                        pEn = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${enAbbr} ${chapter}:${verseNum}</span> ${textEn}</p>`;
-                        break;
-                }
-                outputKr += pKr;
-                outputEn += pEn;
-            });
-        }
-
-        document.getElementById('output-kr').innerHTML = outputKr;
-        document.getElementById('output-en').innerHTML = outputEn;
         document.getElementById('output-wrapper').scrollTop = 0; 
         setTimeout(alignVerseHeights, 10);
     }
 
-    function changeLanguageMode(mode) {
-        languageMode = mode;
-        const toggleBtn = document.getElementById('lang-toggle-button');
-        const copyEnBtn = document.getElementById('copy-en-button');
-
-        if (mode === 'kr') {
-            toggleBtn.textContent = '한글 모드';
-            document.getElementById('output-en').classList.add('hidden');
-            copyEnBtn.classList.add('hidden'); 
-        } else {
-            toggleBtn.textContent = '한영 모드';
-            document.getElementById('output-en').classList.remove('hidden');
-            copyEnBtn.classList.remove('hidden'); 
-        }
-        
-        setTimeout(alignVerseHeights, 10);
-    }
-
-    // 💡 글자 크기 변경 함수 추가
     function changeFontSize(size) {
         currentFontSize = size;
-        document.getElementById('output-kr').style.fontSize = size;
-        document.getElementById('output-en').style.fontSize = size;
-        
+        selectedVersions.forEach(v => {
+            const pane = document.getElementById(`output-${v}`);
+            if(pane) pane.style.fontSize = size;
+        });
         document.querySelectorAll('.btn-size').forEach(btn => btn.classList.remove('active'));
         document.querySelector(`.btn-size[data-size="${size}"]`).classList.add('active');
-        
         setTimeout(alignVerseHeights, 50);
     }
 
     function setupEventListeners() {
-        // 모달창 여닫기 로직
         const settingsModal = document.getElementById('settings-modal');
-        const openBtn = document.getElementById('settings-open-btn');
-        const closeBtn = document.getElementById('settings-close-btn');
-    
-        if (openBtn) {
-            openBtn.addEventListener('click', () => {
-                settingsModal.classList.remove('hidden'); // hidden 클래스를 제거하여 화면에 표시
-            });
-        }
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                settingsModal.classList.add('hidden'); // 다시 hidden을 넣어 숨김
-            });
-        }
-        // 창 바깥쪽을 클릭하면 닫히는 기능
-        window.addEventListener('click', (e) => {
-            if (e.target === settingsModal) {
-                settingsModal.classList.add('hidden');
-            }
-        });
-        document.getElementById('settings-open-btn').addEventListener('click', () => {
-            document.getElementById('settings-modal').classList.remove('hidden');
-        });
-        document.getElementById('settings-close-btn').addEventListener('click', () => {
-            document.getElementById('settings-modal').classList.add('hidden');
-        });
-        window.addEventListener('click', (e) => {
-            if (e.target === document.getElementById('settings-modal')) {
-                document.getElementById('settings-modal').classList.add('hidden');
-            }
-        });
+        document.getElementById('settings-open-btn').addEventListener('click', () => { settingsModal.classList.remove('hidden'); });
+        document.getElementById('settings-close-btn').addEventListener('click', () => { settingsModal.classList.add('hidden'); });
+        window.addEventListener('click', (e) => { if (e.target === settingsModal) settingsModal.classList.add('hidden'); });
 
-        // 💡 체크박스로 변경된 대소문자 구분 로직
         document.getElementById('case-sensitive-checkbox').addEventListener('change', (e) => {
             isCaseSensitive = e.target.checked;
-            if (isSearchActive && currentSearchWord) {
-                executeSearch(document.getElementById('search-input').value.trim()); 
-            }
+            if (isSearchActive && currentSearchWord) executeSearch(document.getElementById('search-input').value.trim()); 
         });
 
-        // 💡 글자 크기 버튼 이벤트
         document.querySelectorAll('.btn-size').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                changeFontSize(e.target.getAttribute('data-size'));
-            });
+            btn.addEventListener('click', (e) => changeFontSize(e.target.getAttribute('data-size')));
         });
 
-        document.getElementById('lang-toggle-button').addEventListener('click', () => {
-            const newMode = languageMode === 'kr' ? 'kren' : 'kr';
-            changeLanguageMode(newMode);
-        });
-
-        document.getElementById('format-dropdown').addEventListener('change', (e) => {
-            changeDisplayMode(e.target.value);
-        });
+        document.getElementById('format-dropdown').addEventListener('change', (e) => changeDisplayMode(e.target.value));
 
         document.getElementById('search-button').addEventListener('click', () => {
             const query = document.getElementById('search-input').value.trim();
@@ -769,9 +711,6 @@
         document.getElementById('search-input').addEventListener('keydown', (event) => {
             if (event.key === 'Enter') document.getElementById('search-button').click();
         });
-        
-        document.getElementById('copy-kr-button').addEventListener('click', () => copyContent('kr'));
-        document.getElementById('copy-en-button').addEventListener('click', () => copyContent('en'));
 
         document.getElementById('output-wrapper').addEventListener('click', function(e) {
             const ref = e.target.closest('.reference');
@@ -805,9 +744,8 @@
         document.getElementById('prev-chapter').addEventListener('click', () => {
             if (!currentBook || !currentChapter) return;
             saveState();
-            if (currentChapter > 1) {
-                selectChapter(currentChapter - 1, true);
-            } else {
+            if (currentChapter > 1) { selectChapter(currentChapter - 1, true); }
+            else {
                 const currentBookIndex = bibleBooks.findIndex(b => b.name === currentBook);
                 if (currentBookIndex > 0) {
                     const prevBook = bibleBooks[currentBookIndex - 1];
@@ -820,9 +758,8 @@
             if (!currentBook || !currentChapter) return;
             saveState();
             const maxChapter = bookToChapters[currentBook];
-            if (currentChapter < maxChapter) {
-                selectChapter(currentChapter + 1, true);
-            } else {
+            if (currentChapter < maxChapter) { selectChapter(currentChapter + 1, true); }
+            else {
                 const currentBookIndex = bibleBooks.findIndex(b => b.name === currentBook);
                 if (currentBookIndex < bibleBooks.length - 1) {
                     const nextBook = bibleBooks[currentBookIndex + 1];
@@ -839,12 +776,8 @@
             } else if (e.key === 'ArrowRight') {
                 const nextButton = document.getElementById('next-chapter');
                 if (!nextButton.classList.contains('hidden')) nextButton.click();
-            }
-        });
-        
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undoAction(); } 
-            else if (e.ctrlKey && e.key.toLowerCase() === 'y') { e.preventDefault(); redoAction(); }
+            } else if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undoAction(); } 
+              else if (e.ctrlKey && e.key.toLowerCase() === 'y') { e.preventDefault(); redoAction(); }
         });
 
         document.addEventListener('copy', (e) => {
@@ -872,12 +805,15 @@
 
     function saveState() {
         if (isRestoring) return;
+        const htmlState = {};
+        selectedVersions.forEach(v => { htmlState[v] = document.getElementById(`output-${v}`).innerHTML; });
+        
         historyStack.push({
             book: currentBook, chapter: currentChapter, verse: currentVerse,
-            displayMode: displayMode, languageMode: languageMode, isCaseSensitive: isCaseSensitive,
+            displayMode: displayMode, isCaseSensitive: isCaseSensitive,
             query: document.getElementById('search-input').value,
-            outputKr: document.getElementById('output-kr').innerHTML,
-            outputEn: document.getElementById('output-en').innerHTML
+            selected: [...selectedVersions],
+            html: htmlState
         });
         redoStack = []; 
         if (historyStack.length > 50) historyStack.shift();
@@ -886,59 +822,51 @@
     function undoAction() {
         if (historyStack.length === 0) return;
         isRestoring = true;
+        const htmlState = {};
+        selectedVersions.forEach(v => { htmlState[v] = document.getElementById(`output-${v}`).innerHTML; });
         redoStack.push({
             book: currentBook, chapter: currentChapter, verse: currentVerse, 
-            displayMode: displayMode, languageMode: languageMode, isCaseSensitive: isCaseSensitive,
+            displayMode: displayMode, isCaseSensitive: isCaseSensitive,
             query: document.getElementById('search-input').value,
-            outputKr: document.getElementById('output-kr').innerHTML,
-            outputEn: document.getElementById('output-en').innerHTML
+            selected: [...selectedVersions], html: htmlState
         });
-        const prevState = historyStack.pop();
-        restoreState(prevState);
+        restoreState(historyStack.pop());
         isRestoring = false;
     }
 
     function redoAction() {
         if (redoStack.length === 0) return;
         isRestoring = true;
+        const htmlState = {};
+        selectedVersions.forEach(v => { htmlState[v] = document.getElementById(`output-${v}`).innerHTML; });
         historyStack.push({
             book: currentBook, chapter: currentChapter, verse: currentVerse, 
-            displayMode: displayMode, languageMode: languageMode, isCaseSensitive: isCaseSensitive,
+            displayMode: displayMode, isCaseSensitive: isCaseSensitive,
             query: document.getElementById('search-input').value,
-            outputKr: document.getElementById('output-kr').innerHTML,
-            outputEn: document.getElementById('output-en').innerHTML
+            selected: [...selectedVersions], html: htmlState
         });
-        const nextState = redoStack.pop();
-        restoreState(nextState);
+        restoreState(redoStack.pop());
         isRestoring = false;
     }
 
     function restoreState(state) {
-        currentBook = state.book;
-        currentChapter = state.chapter;
-        currentVerse = state.verse;
-        displayMode = state.displayMode;
-        languageMode = state.languageMode || 'kr';
-        isCaseSensitive = state.isCaseSensitive || false;
+        currentBook = state.book; currentChapter = state.chapter; currentVerse = state.verse;
+        displayMode = state.displayMode; isCaseSensitive = state.isCaseSensitive || false;
+        
+        if (JSON.stringify(selectedVersions) !== JSON.stringify(state.selected)) {
+            selectedVersions = [...state.selected];
+            renderDndLists();
+            updateUIBySelectedVersions();
+        }
 
         document.getElementById('search-input').value = state.query;
-        document.getElementById('output-kr').innerHTML = state.outputKr;
-        document.getElementById('output-en').innerHTML = state.outputEn || '';
-
         document.getElementById('format-dropdown').value = displayMode;
         document.getElementById('case-sensitive-checkbox').checked = isCaseSensitive;
 
-        const toggleBtn = document.getElementById('lang-toggle-button');
-        const copyEnBtn = document.getElementById('copy-en-button');
-        if (languageMode === 'kr') {
-            toggleBtn.textContent = '한글 모드';
-            document.getElementById('output-en').classList.add('hidden');
-            copyEnBtn.classList.add('hidden');
-        } else {
-            toggleBtn.textContent = '한영 모드';
-            document.getElementById('output-en').classList.remove('hidden');
-            copyEnBtn.classList.remove('hidden');
-        }
+        selectedVersions.forEach(v => {
+            const pane = document.getElementById(`output-${v}`);
+            if(pane && state.html[v]) pane.innerHTML = state.html[v];
+        });
 
         document.querySelectorAll('.book-button').forEach(btn => {
             btn.classList.remove('active');
@@ -961,7 +889,6 @@
         setTimeout(alignVerseHeights, 10);
     }
 
-    // 💡 올려주신 원본 코드 양식(\n\n) 그대로 복구
     function prepareContentForCopy(outputElement) {
         const clone = outputElement.cloneNode(true);
         clone.querySelectorAll('br').forEach(br => {
@@ -988,15 +915,16 @@
         if (isSearchActive) {
             clearTimeout(renderTimer); 
             renderedResultCount = 0;
-            document.getElementById('output-kr').innerHTML = `<p class="search-header" data-verse-id="header" style="font-size: 1.2em; font-weight: bold;">'${currentSearchWord}'이(가) ${currentSearchResults.length}개의 구절에서 총 ${currentSearchOccurrences}번 등장합니다.</p>`;
-            document.getElementById('output-en').innerHTML = `<p class="search-header" data-verse-id="header" style="font-size: 1.2em; font-weight: bold; color: transparent; user-select: none;">'${currentSearchWord}'이(가) ${currentSearchResults.length}개의 구절에서 총 ${currentSearchOccurrences}번 등장합니다.</p>`;
+            selectedVersions.forEach((v, idx) => {
+                const style = idx === 0 ? "font-size: 1.2em; font-weight: bold;" : "font-size: 1.2em; font-weight: bold; color: transparent; user-select: none;";
+                document.getElementById(`output-${v}`).innerHTML = `<p class="search-header" data-verse-id="header" style="${style}">'${currentSearchWord}'이(가) ${currentSearchResults.length}개의 구절에서 총 ${currentSearchOccurrences}번 등장합니다.</p>`;
+            });
             document.getElementById('output-wrapper').scrollTop = 0;
-            
             renderNextSearchChunk();
             renderTimer = setTimeout(autoRenderRemaining, 40);
         } else {
             const query = document.getElementById('search-input').value;
-            const outputHTML = document.getElementById('output-kr').innerHTML;
+            const outputHTML = document.getElementById(`output-${selectedVersions[0]}`).innerHTML;
             if (outputHTML.includes('data-verses') || outputHTML.includes('data-verse-id')) {
                 if (query.trim()) executeSearch(query);
             } else if (currentBook && currentChapter) {
@@ -1013,37 +941,30 @@
         const toast = document.getElementById('toast-notification');
         toast.textContent = message;
         toast.classList.remove('hidden');
-        
         clearTimeout(toastTimeout);
         setTimeout(() => toast.classList.add('show'), 10);
-        
         toastTimeout = setTimeout(() => {
             toast.classList.remove('show');
             setTimeout(() => toast.classList.add('hidden'), 300);
         }, 2000);
     }
 
-    function copyContent(lang) {
-        if (lang === 'en' && languageMode === 'kr') {
-            showToast('⚠️ 한영 모드에서만 영어를 복사할 수 있습니다.');
-            return;
-        }
-
+    // 💡 복사 버튼 로직 (동적으로 전달된 버전 ID 사용)
+    function copyContent(versionKey) {
         if (isSearchActive && renderedResultCount < currentSearchResults.length) {
             clearTimeout(renderTimer); 
             renderNextSearchChunk(true); 
         }
 
-        const outputId = lang === 'kr' ? 'output-kr' : 'output-en';
-        const output = document.getElementById(outputId);
-        
+        const output = document.getElementById(`output-${versionKey}`);
         if (!output || output.innerText.trim() === '') {
             showToast('⚠️ 복사할 내용이 없습니다.');
             return;
         }
 
         const contentToCopy = prepareContentForCopy(output);
-        const successMessage = lang === 'kr' ? '✅ 한글 본문이 복사되었습니다.' : '✅ 영어 본문이 복사되었습니다.';
+        const versionName = versionsMeta[versionKey].name;
+        const successMessage = `✅ ${versionName} 본문이 복사되었습니다.`;
         
         navigator.clipboard.writeText(contentToCopy)
             .then(() => showToast(successMessage))
@@ -1061,4 +982,3 @@
                 document.body.removeChild(tempTextArea);
             });
     }
-
