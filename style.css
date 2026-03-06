@@ -1,0 +1,185 @@
+* {
+    box-sizing: border-box;
+    font-family: '맑은 고딕', sans-serif;
+}
+body {
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+.main-container {
+    display: flex;
+    flex: 1;
+    height: calc(100vh - 160px);
+    gap: 20px;
+}
+.sidebar {
+    width: 180px;
+    overflow-y: auto;
+    border-right: 1px solid #ddd;
+    padding-right: 10px;
+}
+.book-button {
+    width: 50px;
+    height: 35px;
+    margin: 3px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+.book-button.old { background-color: #e6f0ff; }
+.book-button.new { background-color: #ffe6e6; }
+.book-button:hover { opacity: 0.8; }
+.book-button.active.old { background-color: #99c2ff; }
+.book-button.active.new { background-color: #ff9999; }
+
+.chapter-container {
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: 5px;
+    margin-bottom: 10px;
+    width: 162px;
+}
+.chapter-button {
+    width: 28px;
+    height: 28px;
+    margin: 2px;
+    background-color: #ffffff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8em;
+}
+.chapter-button:hover { background-color: #f0f0f0; }
+.chapter-button.active { background-color: #d9d9d9; }
+.books-row { display: flex; margin-bottom: 5px; }
+.new-testament-gap { margin-top: 15px; }
+
+.content-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.search-area {
+    display: flex;
+    margin-bottom: 10px;
+}
+#search-input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+}
+
+/* 💡 버튼 공통 스타일 및 색상 분리 */
+.button {
+    padding: 8px 15px;
+    margin-left: 10px;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+.btn-search { background-color: #4285f4; } /* 파란색 */
+.btn-search:hover { background-color: #3367d6; }
+.btn-copy { background-color: #0f9d58; } /* 초록색 */
+.btn-copy:hover { background-color: #0b8043; }
+.btn-nav { background-color: #673ab7; } /* 보라색 */
+.btn-nav:hover { background-color: #512da8; }
+.btn-settings { background-color: #607d8b; } /* 회색 */
+.btn-settings:hover { background-color: #455a64; }
+.btn-toggle { background-color: #f0f0f0; color: #333; border: 1px solid #ccc; margin-left: 0; width: 100%; text-align: center; }
+.btn-toggle:hover { background-color: #e4e4e4; }
+
+.button.hidden { display: none !important; }
+
+.controls-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+.navigation-buttons { display: flex; gap: 10px; }
+
+/* 💡 설정 모달창 스타일 */
+.modal {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    display: flex; justify-content: center; align-items: center;
+    z-index: 2000;
+}
+.modal.hidden { display: none !important; }
+.modal-content {
+    background-color: #fff; padding: 25px; border-radius: 8px; width: 320px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+.modal-header h3 { margin: 0; color: #333; }
+.close-btn { font-size: 24px; cursor: pointer; color: #888; }
+.close-btn:hover { color: #333; }
+.setting-item { margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px; }
+.setting-item label { font-weight: bold; color: #555; }
+.dropdown { padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; cursor: pointer; font-family: '맑은 고딕', sans-serif; }
+.font-size-controls { display: flex; gap: 5px; }
+.btn-size { padding: 5px 0; flex: 1; margin-left: 0; background-color: #f0f0f0; color: #333; border: 1px solid #ccc; font-weight: normal; }
+.btn-size.active { background-color: #4285f4; color: white; border-color: #3367d6; font-weight: bold; }
+
+#output-wrapper {
+    display: flex;
+    flex: 1;
+    gap: 20px;
+    overflow-y: auto;
+    border: none;
+    padding: 0;
+    background: none;
+    scroll-behavior: smooth;
+}
+.output-pane {
+    flex: 1;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    background-color: #fdfdfd;
+    height: fit-content;
+    min-height: 100%;
+    font-size: 16px; /* 기본 글자크기 */
+}
+.output-pane.hidden { display: none; }
+.hidden { display: none !important; }
+
+.output-pane p {
+    margin: 8px 0;
+    line-height: 1.6;
+}
+.chapter-title { color: blue; }
+.verse-number { color: blue; }
+
+.reference { color: blue; cursor: pointer; }
+.highlight { background-color: yellow; }
+.verse-highlight { background-color: yellow; }
+.error { color: red; }
+
+.toast {
+    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+    background-color: #323232; color: white; padding: 12px 24px;
+    border-radius: 8px; font-size: 15px; font-weight: bold;
+    z-index: 1000; opacity: 0; transition: opacity 0.3s ease-in-out;
+    pointer-events: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+.toast.show { opacity: 1; }
+
+/* 💡 .hidden이 붙으면 무조건 숨기도록 강제함 */
+.hidden { 
+    display: none !important; 
+}
+
+/* 💡 설정창(modal)에서 .hidden이 빠지면 화면 정중앙에 정렬하여 표시함 */
+#settings-modal:not(.hidden) {
+    display: flex !important;
+}

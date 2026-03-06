@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>성경 뷰어</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="main-container">
+    <div class="sidebar" id="sidebar">
+        </div>
+    <div class="content-area">
+        
+        <div class="search-area">
+            <input type="text" id="search-input" placeholder="단어 검색 또는 구절 검색 (예: 창 1:1, Gen1.1, 1 cor 13:1, 하나님)">
+            <button class="button btn-search" id="search-button">검색</button>
+            <button class="button btn-copy" id="copy-kr-button">복사(한글)</button>
+            <button class="button btn-copy hidden" id="copy-en-button">복사(영어)</button>
+            <button class="button btn-settings" id="settings-open-btn">⚙️ 설정</button>
+        </div>
+        
+        <div class="controls-container">
+            <div class="navigation-buttons hidden" id="navigation-buttons">
+                <button class="button btn-nav" id="prev-chapter">이전 장</button>
+                <button class="button btn-nav" id="next-chapter">다음 장</button>
+            </div>
+        </div>
+        
+        <div class="output-container" id="output-wrapper">
+            <div id="output-kr" class="output-pane font-malgun"></div>
+            <div id="output-en" class="output-pane font-malgun hidden"></div>
+        </div>
+    </div>
+</div>
+
+<div id="settings-modal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>환경 설정</h3>
+            <span class="close-btn" id="settings-close-btn">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="setting-item">
+                <label>🌐 언어 표시</label>
+                <button class="button btn-toggle" id="lang-toggle-button">한글 모드</button>
+            </div>
+            <div class="setting-item">
+                <label>📄 출력 양식</label>
+                <select id="format-dropdown" class="dropdown">
+                    <option value="standard">기본 모드</option>
+                    <option value="abbr">약식 모드</option>
+                    <option value="sequence">연속 모드</option>
+                    <option value="quote">인용 모드</option>
+                    <option value="short-quote">인용 약식 모드</option>
+                    <option value="double-quote">겹낫표 인용 모드</option>
+                    <option value="double-short-quote">겹낫표 약식 모드</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label>🔍 검색 옵션</label>
+                <div>
+                    <input type="checkbox" id="case-sensitive-checkbox"> 
+                    <label for="case-sensitive-checkbox" style="font-weight: normal; cursor: pointer;">영문 대소문자 구분</label>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>🔠 글자 크기</label>
+                <div class="font-size-controls">
+                    <button class="button btn-size" data-size="14px">작게</button>
+                    <button class="button btn-size active" data-size="16px">기본</button>
+                    <button class="button btn-size" data-size="20px">크게</button>
+                    <button class="button btn-size" data-size="24px">아주 크게</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast-notification" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
