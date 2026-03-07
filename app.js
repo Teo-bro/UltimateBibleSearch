@@ -232,6 +232,7 @@
         setTimeout(alignVerseHeights, 50);
     }
 
+    // 💡 최적화된 다중 창 높이 맞춤 함수 (프리징 완벽 해결)
     function alignVerseHeights() {
         if (selectedVersions.length <= 1) {
             selectedVersions.forEach(v => {
@@ -240,27 +241,42 @@
             });
             return;
         }
-
+    
         const contentPanes = selectedVersions.map(v => document.getElementById(`content-${v}`));
         if(contentPanes.some(p => !p)) return;
-
+    
+        // 1. 모든 요소의 높이를 초기화 (Batch Write 1)
         contentPanes.forEach(p => {
             Array.from(p.children).forEach(el => el.style.minHeight = 'auto');
         });
-
+    
         const count = contentPanes[0].children.length;
+        
+        // 💡 핵심: "읽기(Read)"와 "쓰기(Write)"를 완벽하게 분리합니다.
+        
+        // 2. 먼저 모든 줄의 최대 높이를 "한 번에" 계산해서 배열에 저장합니다 (Batch Read)
+        const maxHeights = [];
         for (let i = 0; i < count; i++) {
             let maxHeight = 0;
-            const rowElements = [];
             for (let j = 0; j < contentPanes.length; j++) {
                 const el = contentPanes[j].children[i];
                 if (el) {
-                    rowElements.push(el);
+                    // 각 창의 i번째 구절 높이를 읽어와 가장 큰 값을 찾음
                     maxHeight = Math.max(maxHeight, el.getBoundingClientRect().height);
                 }
             }
-            if (maxHeight > 0) {
-                rowElements.forEach(el => el.style.minHeight = `${maxHeight}px`);
+            maxHeights.push(maxHeight);
+        }
+    
+        // 3. 계산된 높이를 "한 번에" 적용합니다 (Batch Write 2)
+        for (let i = 0; i < count; i++) {
+            if (maxHeights[i] > 0) {
+                for (let j = 0; j < contentPanes.length; j++) {
+                    const el = contentPanes[j].children[i];
+                    if (el) {
+                        el.style.minHeight = `${maxHeights[i]}px`;
+                    }
+                }
             }
         }
     }
@@ -1125,4 +1141,5 @@
                 document.body.removeChild(tempTextArea);
             });
     }
+
 
