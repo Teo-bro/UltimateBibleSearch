@@ -7,7 +7,7 @@
         'krv2': { file: 'bible_data_krv2.json', name: '개역개정', abbr: '개정', isEn: false, data: {} }
     };
     
-    let selectedVersions = ['kr']; 
+    let selectedVersions = ['kr', 'krv', 'hyj']; 
 
     let currentBook = null; 
     let currentChapter = null; 
@@ -1141,5 +1141,6 @@
                 document.body.removeChild(tempTextArea);
             });
     }
+
 
 
