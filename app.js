@@ -68,9 +68,9 @@
         { name: "미카", abbr: "미", altNames: ["미가"], enName: "Micah", enAbbr: "Mic", chapters: 7, testament: "old" },
         { name: "나훔", abbr: "나", enName: "Nahum", enAbbr: "Nah", chapters: 3, testament: "old" },
         { name: "하박국", abbr: "합", enName: "Habakkuk", enAbbr: "Hab", chapters: 3, testament: "old" },
-        { name: "스파냐", abbr: "슾", altNames: ["스바냐"], enName: "Zephaniah", enAbbr: "Zeph", chapters: 3, testament: "old" },
+        { name: "스파냐", abbr: "슾", altNames: ["스바냐", "습"], enName: "Zephaniah", enAbbr: "Zeph", chapters: 3, testament: "old" },
         { name: "학개", abbr: "학", enName: "Haggai", enAbbr: "Hag", chapters: 2, testament: "old" },
-        { name: "스카랴", abbr: "슼", altNames: ["스가랴"], enName: "Zechariah", enAbbr: "Zech", chapters: 14, testament: "old" },
+        { name: "스카랴", abbr: "슼", altNames: ["스가랴", "슥"], enName: "Zechariah", enAbbr: "Zech", chapters: 14, testament: "old" },
         { name: "말라키", abbr: "말", altNames: ["말라기"], enName: "Malachi", enAbbr: "Mal", chapters: 4, testament: "old" },
         { name: "마태복음", abbr: "마", enName: "Matthew", enAbbr: "Matt", chapters: 28, testament: "new" },
         { name: "마가복음", abbr: "막", enName: "Mark", enAbbr: "Mark", chapters: 16, testament: "new" },
@@ -1138,6 +1138,7 @@
                 document.body.removeChild(tempTextArea);
             });
     }
+
 
 
 
