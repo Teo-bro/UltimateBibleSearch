@@ -3,6 +3,7 @@
         'kr': { file: 'bible_data.json', name: '한글킹제임스', abbr: '한킹', isEn: false, data: {} },
         'en': { file: 'bible_data_en.json', name: 'KJV', abbr: 'KJV', isEn: true, data: {} },
         'hjy': { file: 'bible_data_hjy.json', name: '흠정역', abbr: '흠정', isEn: false, data: {} },
+        'pjy': { file: 'bible_data_pjy.json', name: '표준역', abbr: '표준', isEn: false, data: {} } 
         'krv': { file: 'bible_data_krv.json', name: '개역한글', abbr: '개역', isEn: false, data: {} },
         'krv2': { file: 'bible_data_krv2.json', name: '개역개정', abbr: '개정', isEn: false, data: {} }
     };
@@ -1141,6 +1142,7 @@
                 document.body.removeChild(tempTextArea);
             });
     }
+
 
 
 
