@@ -57,7 +57,7 @@
         { name: "솔로몬의 노래", abbr: "솔", altNames: ["솔로몬의 아가", "아가", "아"], enName: "Song of Solomon", enAbbr: "Song", chapters: 8, testament: "old" },
         { name: "이사야", abbr: "사", enName: "Isaiah", enAbbr: "Isa", chapters: 66, testament: "old" },
         { name: "예레미야", abbr: "렘", enName: "Jeremiah", enAbbr: "Jer", chapters: 52, testament: "old" },
-        { name: "예레미야 애가", abbr: "애", enName: "Lamentations", enAbbr: "Lam", chapters: 5, testament: "old" },
+        { name: "예레미야 애가", abbr: "애", altNames: ["예레미야애가"], enName: "Lamentations", enAbbr: "Lam", chapters: 5, testament: "old" },
         { name: "에스겔", abbr: "겔", enName: "Ezekiel", enAbbr: "Ezek", chapters: 48, testament: "old" },
         { name: "다니엘", abbr: "단", enName: "Daniel", enAbbr: "Dan", chapters: 12, testament: "old" },
         { name: "호세아", abbr: "호", enName: "Hosea", enAbbr: "Hos", chapters: 14, testament: "old" },
@@ -1142,6 +1142,7 @@
                 document.body.removeChild(tempTextArea);
             });
     }
+
 
 
 
