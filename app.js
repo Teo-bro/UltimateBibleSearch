@@ -39,7 +39,7 @@
         { name: "민수기", abbr: "민", enName: "Numbers", enAbbr: "Num", chapters: 36, testament: "old" },
         { name: "신명기", abbr: "신", enName: "Deuteronomy", enAbbr: "Deut", chapters: 34, testament: "old" },
         { name: "여호수아", abbr: "수", altNames: ["여호수아기"],enName: "Joshua", enAbbr: "Josh", chapters: 24, testament: "old" },
-        { name: "재판관기", abbr: "판", altNames: ["사사기", "삿"], enName: "Judges", enAbbr: "Judg", chapters: 21, testament: "old" },
+        { name: "재판관기", abbr: "판", altNames: ["사사기"], enName: "Judges", enAbbr: "Judg", chapters: 21, testament: "old" },
         { name: "룻기", abbr: "룻", enName: "Ruth", enAbbr: "Ruth", chapters: 4, testament: "old" },
         { name: "사무엘상", abbr: "삼상", altNames: ["사무엘기상"], enName: "1 Samuel", enAbbr: "1 Sam", chapters: 31, testament: "old" },
         { name: "사무엘하", abbr: "삼하", altNames: ["사무엘기하"],enName: "2 Samuel", enAbbr: "2 Sam", chapters: 24, testament: "old" },
@@ -68,9 +68,9 @@
         { name: "미카", abbr: "미", altNames: ["미가"], enName: "Micah", enAbbr: "Mic", chapters: 7, testament: "old" },
         { name: "나훔", abbr: "나", enName: "Nahum", enAbbr: "Nah", chapters: 3, testament: "old" },
         { name: "하박국", abbr: "합", enName: "Habakkuk", enAbbr: "Hab", chapters: 3, testament: "old" },
-        { name: "스파냐", abbr: "슾", altNames: ["스바냐", "습"], enName: "Zephaniah", enAbbr: "Zeph", chapters: 3, testament: "old" },
+        { name: "스파냐", abbr: "슾", altNames: ["스바냐"], enName: "Zephaniah", enAbbr: "Zeph", chapters: 3, testament: "old" },
         { name: "학개", abbr: "학", enName: "Haggai", enAbbr: "Hag", chapters: 2, testament: "old" },
-        { name: "스카랴", abbr: "슼", altNames: ["스가랴", "슥"], enName: "Zechariah", enAbbr: "Zech", chapters: 14, testament: "old" },
+        { name: "스카랴", abbr: "슼", altNames: ["스가랴"], enName: "Zechariah", enAbbr: "Zech", chapters: 14, testament: "old" },
         { name: "말라키", abbr: "말", altNames: ["말라기"], enName: "Malachi", enAbbr: "Mal", chapters: 4, testament: "old" },
         { name: "마태복음", abbr: "마", enName: "Matthew", enAbbr: "Matt", chapters: 28, testament: "new" },
         { name: "마가복음", abbr: "막", enName: "Mark", enAbbr: "Mark", chapters: 16, testament: "new" },
@@ -114,17 +114,13 @@
     // 💡 대체 약어 하드코딩 매핑 (안전하게 이름 찾기용)
     const altAbbrMap = {
         "사사기": "삿",
-        "역대상": "대상",
-        "역대하": "대하",
         "솔로몬의 아가": "아",
         "아가": "아",
-        "미가": "미",
         "스바냐": "습",
         "스가랴": "슥",
-        "말라기": "말",
-        "요한1서": "요일",
-        "요한2서": "요이",
-        "요한3서": "요삼"
+        "요한1서": "요1",
+        "요한2서": "요2",
+        "요한3서": "요3"
     };
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -1142,6 +1138,7 @@
                 document.body.removeChild(tempTextArea);
             });
     }
+
 
 
 
