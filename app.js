@@ -39,7 +39,7 @@
         { name: "민수기", abbr: "민", enName: "Numbers", enAbbr: "Num", chapters: 36, testament: "old" },
         { name: "신명기", abbr: "신", enName: "Deuteronomy", enAbbr: "Deut", chapters: 34, testament: "old" },
         { name: "여호수아", abbr: "수", altNames: ["여호수아기"],enName: "Joshua", enAbbr: "Josh", chapters: 24, testament: "old" },
-        { name: "재판관기", abbr: "판", altNames: ["사사기"], enName: "Judges", enAbbr: "Judg", chapters: 21, testament: "old" },
+        { name: "재판관기", abbr: "판", altNames: ["사사기", "삿"], enName: "Judges", enAbbr: "Judg", chapters: 21, testament: "old" },
         { name: "룻기", abbr: "룻", enName: "Ruth", enAbbr: "Ruth", chapters: 4, testament: "old" },
         { name: "사무엘상", abbr: "삼상", altNames: ["사무엘기상"], enName: "1 Samuel", enAbbr: "1 Sam", chapters: 31, testament: "old" },
         { name: "사무엘하", abbr: "삼하", altNames: ["사무엘기하"],enName: "2 Samuel", enAbbr: "2 Sam", chapters: 24, testament: "old" },
@@ -1138,6 +1138,7 @@
                 document.body.removeChild(tempTextArea);
             });
     }
+
 
 
 
