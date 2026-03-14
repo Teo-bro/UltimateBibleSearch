@@ -665,20 +665,23 @@
                 (b.altNames && b.altNames.some(alt => clean(alt) === cleanBookRaw || clean(alt.replace(/[0-9]/g, '')) === cleanBookRaw))
             );
             
+            // 에러 1. 책 이름 자체가 잘못된 경우
             if (!bookObj) {
                 selectedVersions.forEach(v => {
                     const c = document.getElementById(`content-${v}`);
-                    if(c) c.innerHTML = `<p class="error" data-verse-id="header">잘못된 책 이름입니다: ${bookRaw}</p>`;
+                    if(c) c.innerHTML = `<p class="error" data-verse-id="header">❌ 잘못된 성경 책 이름입니다: '${bookRaw}'</p>`;
                 });
                 return;
             }
 
             const book = bookObj.name;
             const chapterData = versionsMeta['kr'].data[book]?.[chapter];
+            
+            // 에러 2. 해당 책에 요청한 장(Chapter)이 없는 경우
             if (!chapterData) {
                 selectedVersions.forEach(v => {
                     const c = document.getElementById(`content-${v}`);
-                    if(c) c.innerHTML = `<p class="error" data-verse-id="header">존재하지 않는 장: ${bookObj.name} ${chapter}장</p>`;
+                    if(c) c.innerHTML = `<p class="error" data-verse-id="header">❌ 존재하지 않는 장입니다: ${bookObj.name} ${chapter}장</p>`;
                 });
                 return;
             }
@@ -686,15 +689,45 @@
             const verses = [];
             const parts = versePart.split(',');
             for (const part of parts) {
+                // 범위 검색 (예: 1-5)
                 if (part.includes('-')) {
                     const [start, end] = part.split('-').map(Number);
-                    if (start > end) return;
-                    for (let v = start; v <= end; v++) {
-                        if (chapterData[v]) verses.push({ book, chapter, verse: v });
+                    
+                    // 에러 3. 범위 입력 오류 (예: 5-1 처럼 뒤집힌 경우)
+                    if (start > end) {
+                        selectedVersions.forEach(v => {
+                            const c = document.getElementById(`content-${v}`);
+                            if(c) c.innerHTML = `<p class="error" data-verse-id="header">❌ 잘못된 구절 범위입니다: ${part} (시작 번호가 끝 번호보다 클 수 없습니다)</p>`;
+                        });
+                        return;
                     }
-                } else {
+                    
+                    for (let v = start; v <= end; v++) {
+                        if (chapterData[v]) {
+                            verses.push({ book, chapter, verse: v });
+                        } else {
+                            // 에러 4. 범위 내에 존재하지 않는 절이 포함된 경우 즉시 차단
+                            selectedVersions.forEach(version => {
+                                const c = document.getElementById(`content-${version}`);
+                                if(c) c.innerHTML = `<p class="error" data-verse-id="header">❌ 존재하지 않는 구절이 포함되어 있습니다: ${bookObj.name} ${chapter}장 ${v}절</p>`;
+                            });
+                            return; // 즉시 중단
+                        }
+                    }
+                } 
+                // 단일 절 검색 (예: 3)
+                else {
                     const v = Number(part);
-                    if (chapterData[v]) verses.push({ book, chapter, verse: v });
+                    if (chapterData[v]) {
+                        verses.push({ book, chapter, verse: v });
+                    } else {
+                        // 에러 5. 입력한 단일 절이 존재하지 않는 경우 즉시 차단
+                        selectedVersions.forEach(version => {
+                            const c = document.getElementById(`content-${version}`);
+                            if(c) c.innerHTML = `<p class="error" data-verse-id="header">❌ 존재하지 않는 구절입니다: ${bookObj.name} ${chapter}장 ${v}절</p>`;
+                        });
+                        return; // 즉시 중단
+                    }
                 }
             }
             allGroups.push({ book, chapter: parseInt(chapter), verses });
@@ -703,7 +736,6 @@
         const allVerses = allGroups.flatMap(g => g.verses);
         displayVerseResults(allVerses, allGroups);
     }
-
     function displayVerseResults(verses, verseGroups = null) {
         if (!verses || verses.length === 0) {
             selectedVersions.forEach(v => {
