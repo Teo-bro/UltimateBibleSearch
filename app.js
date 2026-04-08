@@ -190,10 +190,8 @@ function escapeRegExp(string) {
 function getXrefHtml(xrefText, bookName, chapter, verseNum) {
     if (!xrefText) return "";
     
-    // 체크 해제 시 보여질 짧은 텍스트 (기본)
     let shortHtml = `<span class="xref-short">${xrefText}</span>`;
 
-    // 체크 시 보여질 확장 텍스트 (참조구절 본문 가져오기)
     let targetV = selectedVersions[0] === 'xref' ? 'kr' : selectedVersions[0];
     let targetData = versionsMeta[targetV]?.data;
     let targetMeta = versionsMeta[targetV];
@@ -202,7 +200,9 @@ function getXrefHtml(xrefText, bookName, chapter, verseNum) {
 
     const tokens = xrefText.split(' ');
     
-    let expandedHtml = `<div class="xref-expanded">`;
+    // 💡 1. 네모칸 배경을 살짝 더 어두운 회색(#e9ecef)으로 변경
+    // 💡 2. DOM 찢어짐(본문 밀림 현상)을 막기 위해 <div> 대신 <span> 사용
+    let expandedHtml = `<span class="xref-expanded" style="background-color: #e9ecef; border: 1px solid #d6d8db; border-radius: 6px; padding: 10px; margin-top: 8px; box-sizing: border-box;">`;
 
     for (let i = 0; i < tokens.length; i += 2) {
         let abbr = tokens[i];
@@ -215,24 +215,25 @@ function getXrefHtml(xrefText, bookName, chapter, verseNum) {
         let displayBook = targetMeta.bookNames?.[fullBookName] || fullBookName;
         let displayAbbr = targetMeta.bookAbbrs?.[fullBookName] || fullBookName;
 
-        // 💡 볼드체(strong) 태그가 완전히 삭제되었습니다.
         let refBook = `<span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">${displayBook} ${c}:${v}</span>`;
         let refAbbr = `<span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">${displayAbbr} ${c}:${v}</span>`;
 
-        // 설정된 출력 양식(displayMode)을 그대로 따릅니다.
+        // 💡 3. 마찬가지로 <p> 대신 <span style="display: block;">을 사용하여
+        // 구조는 그대로 유지하되 왼쪽부터 깔끔하게 줄바꿈되도록 강제함
+        let itemStyle = "display: block; margin-bottom: 8px; line-height: 1.5;";
         let p = "";
         switch (displayMode) {
-            case 'standard': p = `<p>${refBook}<br>${verseText}</p>`; break;
-            case 'abbr': p = `<p>${refAbbr} ${verseText}</p>`; break;
-            case 'quote': p = `<p>「${verseText}」<br>(${refBook})</p>`; break;
-            case 'short-quote': p = `<p>「${verseText}」(${refAbbr})</p>`; break; 
-            case 'double-quote': p = `<p>『${verseText}』<br>(${refBook})</p>`; break;
-            case 'double-short-quote': p = `<p>『${verseText}』(${refAbbr})</p>`; break; 
-            case 'sequence': p = `<p>${refAbbr} ${verseText}</p>`; break;
+            case 'standard': p = `<span style="${itemStyle}">${refBook}<br>${verseText}</span>`; break;
+            case 'abbr': p = `<span style="${itemStyle}">${refAbbr} ${verseText}</span>`; break;
+            case 'quote': p = `<span style="${itemStyle}">「${verseText}」<br>(${refBook})</span>`; break;
+            case 'short-quote': p = `<span style="${itemStyle}">「${verseText}」(${refAbbr})</span>`; break; 
+            case 'double-quote': p = `<span style="${itemStyle}">『${verseText}』<br>(${refBook})</span>`; break;
+            case 'double-short-quote': p = `<span style="${itemStyle}">『${verseText}』(${refAbbr})</span>`; break; 
+            case 'sequence': p = `<span style="${itemStyle}">${refAbbr} ${verseText}</span>`; break;
         }
         expandedHtml += p;
     }
-    expandedHtml += `</div>`;
+    expandedHtml += `</span>`;
 
     return shortHtml + expandedHtml;
 }
