@@ -16,7 +16,8 @@
     let currentVerse = null; 
     let displayMode = "standard"; 
     let searchMode = "exact"; 
-    let isCaseSensitive = false; 
+    let isCaseSensitive = false;
+    let isExpandXref = false;
     let currentFontSize = "16px"; 
     let toastTimeout; 
 
@@ -281,6 +282,47 @@
 
     window.addEventListener('resize', () => { setTimeout(alignVerseHeights, 100); });
 
+    function expandXrefText(xrefText) {
+        if (!xrefText) return "";
+        
+        // 1번 요청 반영: 기준 역본은 첫 번째 역본, 'xref'만 띄웠을 땐 'kr'
+        let targetV = selectedVersions[0] === 'xref' ? 'kr' : selectedVersions[0];
+        let targetData = versionsMeta[targetV].data;
+        let targetMeta = versionsMeta[targetV];
+        
+        const tokens = xrefText.split(' ');
+        let expandedHtml = "<div class='xref-expanded-container' style='margin-top: 10px;'>";
+    
+        for (let i = 0; i < tokens.length; i += 2) {
+            let abbr = tokens[i];
+            let cv = tokens[i+1];
+            if (!abbr || !cv) continue;
+    
+            let [c, v] = cv.split(':');
+            let fullBookName = abbrToName[abbr] || abbr; 
+            let verseText = targetData[fullBookName]?.[c]?.[v] || "(본문 없음)";
+    
+            let displayBook = targetMeta.bookNames?.[fullBookName] || fullBookName;
+            let displayAbbr = targetMeta.bookAbbrs?.[fullBookName] || fullBookName;
+    
+            let formattedVerse = "";
+            // 2번 요청 반영: 설정된 양식(displayMode)을 따르되, 주소 <span> 태그를 <strong>으로 감쌈
+            switch (displayMode) {
+                case 'standard': formattedVerse = `<strong><span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">${displayBook} ${c}:${v}</span></strong><br>${verseText}`; break;
+                case 'abbr': formattedVerse = `<strong><span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">${displayAbbr} ${c}:${v}</span></strong> ${verseText}`; break;
+                case 'quote': formattedVerse = `「${verseText}」<br><strong><span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">(${displayBook} ${c}:${v})</span></strong>`; break;
+                case 'short-quote': formattedVerse = `「${verseText}」<strong><span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">(${displayAbbr} ${c}:${v})</span></strong>`; break;
+                case 'double-quote': formattedVerse = `『${verseText}』<br><strong><span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">(${displayBook} ${c}:${v})</span></strong>`; break;
+                case 'double-short-quote': formattedVerse = `『${verseText}』<strong><span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">(${displayAbbr} ${c}:${v})</span></strong>`; break;
+                case 'sequence': formattedVerse = `<strong><span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">${displayAbbr} ${c}:${v}</span></strong> ${verseText}`; break;
+            }
+            // 가독성을 위한 들여쓰기 및 회색 선 디자인
+            expandedHtml += `<div style="margin-bottom: 12px; padding-left: 10px; border-left: 3px solid #ccc; color: #444; font-size: 0.95em;">${formattedVerse}</div>`;
+        }
+        expandedHtml += "</div>";
+        return expandedHtml;
+    }
+
     function initDragAndDrop() {
         const lists = document.querySelectorAll('.dnd-list');
         lists.forEach(list => {
@@ -469,7 +511,9 @@
             let html = `<h2 class="chapter-title" data-verse-id="header">${displayBookName} ${chapter}${postfix}</h2>`;
             
             for (const verseNum of verseNums) {
-                const text = meta.data[bookName]?.[chapter]?.[verseNum] || "";
+                let text = meta.data[bookName]?.[chapter]?.[verseNum] || "";
+                // 👇 이 한 줄 추가
+                if (v === 'xref' && isExpandXref) text = expandXrefText(text);
                 const isHighlighted = highlightVerses.includes(verseNum);
                 const verseNumClass = isHighlighted ? 'verse-number verse-highlight' : 'verse-number';
                 const uniqueId = `verse-${bookName}-${chapter}-${verseNum}`;
@@ -586,7 +630,9 @@
             
             for (let idx = renderedResultCount; idx < chunkEnd; idx++) {
                 const { book, chapter, verse } = currentSearchResults[idx];
-                const text = meta.data[book]?.[chapter]?.[verse] || "";
+                let text = meta.data[book]?.[chapter]?.[verse] || "";
+                // 👇 이 한 줄 추가
+                if (v === 'xref' && isExpandXref) text = expandXrefText(text);
                 
                 const highlighted = text.replace(highlightRegex, match => `<span class="highlight">${match}</span>`);
                 
@@ -769,8 +815,11 @@
                     ranges.push(currentRange);
 
                     const verseRef = ranges.map(range => range.length === 1 ? range[0] : `${range[0]}-${range[range.length - 1]}`).join(',');
-                    const combinedText = groupVerses.sort((a, b) => a.verse - b.verse).map(vv => meta.data[book]?.[chapter]?.[vv.verse] || "").join(' ');
-
+                    const combinedText = groupVerses.sort((a, b) => a.verse - b.verse).map(vv => {
+                        let t = meta.data[book]?.[chapter]?.[vv.verse] || "";
+                        if (v === 'xref' && isExpandXref) t = expandXrefText(t);
+                        return t;
+                    }).join(isExpandXref && v === 'xref' ? '' : ' ');
                     const uniqueId = `vsearch-${groupIndex}`;
                     let p = "";
                     switch (displayMode) {
@@ -783,7 +832,8 @@
                         case 'sequence': {
                             let seq = "";
                             groupVerses.sort((a, b) => a.verse - b.verse).forEach((vv, vIdx) => {
-                                const t = meta.data[book]?.[chapter]?.[vv.verse] || "";
+                                let t = meta.data[book]?.[chapter]?.[vv.verse] || "";
+                                if (v === 'xref' && isExpandXref) t = expandXrefText(t);
                                 if (vIdx === 0) seq += `<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${vv.verse}">${displayAbbr} ${chapter}:${vv.verse}</span> ${t}`;
                                 else seq += `<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verses="${vv.verse}">${chapter}:${vv.verse}</span> ${t}`;
                             });
@@ -845,6 +895,11 @@
         document.getElementById('case-sensitive-checkbox').addEventListener('change', (e) => {
             isCaseSensitive = e.target.checked;
             if (isSearchActive && currentSearchWord) executeSearch(document.getElementById('search-input').value.trim()); 
+        });
+
+        document.getElementById('expand-xref-checkbox').addEventListener('change', (e) => {
+            isExpandXref = e.target.checked;
+            changeDisplayMode(displayMode); // 이 함수가 화면을 가장 깔끔하게 다시 그려줍니다.
         });
 
         document.querySelectorAll('.btn-size').forEach(btn => {
@@ -971,6 +1026,7 @@
         historyStack.push({
             book: currentBook, chapter: currentChapter, verse: currentVerse,
             displayMode: displayMode, isCaseSensitive: isCaseSensitive, searchMode: searchMode,
+            isExpandXref: isExpandXref,
             query: document.getElementById('search-input').value,
             selected: [...selectedVersions],
             html: htmlState
@@ -990,6 +1046,7 @@
         redoStack.push({
             book: currentBook, chapter: currentChapter, verse: currentVerse, 
             displayMode: displayMode, isCaseSensitive: isCaseSensitive, searchMode: searchMode,
+            isExpandXref: isExpandXref,
             query: document.getElementById('search-input').value,
             selected: [...selectedVersions], html: htmlState
         });
@@ -1008,6 +1065,7 @@
         historyStack.push({
             book: currentBook, chapter: currentChapter, verse: currentVerse, 
             displayMode: displayMode, isCaseSensitive: isCaseSensitive, searchMode: searchMode,
+            isExpandXref: isExpandXref,
             query: document.getElementById('search-input').value,
             selected: [...selectedVersions], html: htmlState
         });
@@ -1019,6 +1077,7 @@
         currentBook = state.book; currentChapter = state.chapter; currentVerse = state.verse;
         displayMode = state.displayMode; isCaseSensitive = state.isCaseSensitive || false;
         searchMode = state.searchMode || 'exact';
+        isExpandXref = state.isExpandXref || false;
         
         if (JSON.stringify(selectedVersions) !== JSON.stringify(state.selected)) {
             selectedVersions = [...state.selected];
