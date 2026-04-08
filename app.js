@@ -190,13 +190,10 @@ function escapeRegExp(string) {
 function getXrefHtml(xrefText, bookName, chapter, verseNum) {
     if (!xrefText) return "";
     
-    // 1. 대표구절 본문 가져오기 (가장 기본인 한글킹제임스 기준)
-    let mainVerseText = versionsMeta['kr'].data[bookName]?.[chapter]?.[verseNum] || "(대표구절 없음)";
-    
-    // 2. 체크 해제 시 보여질 짧은 텍스트
+    // 체크 해제 시 보여질 짧은 텍스트 (기본)
     let shortHtml = `<span class="xref-short">${xrefText}</span>`;
 
-    // 3. 체크 시 보여질 확장 텍스트 (참조구절 본문 가져오기)
+    // 체크 시 보여질 확장 텍스트 (참조구절 본문 가져오기)
     let targetV = selectedVersions[0] === 'xref' ? 'kr' : selectedVersions[0];
     let targetData = versionsMeta[targetV]?.data;
     let targetMeta = versionsMeta[targetV];
@@ -205,9 +202,7 @@ function getXrefHtml(xrefText, bookName, chapter, verseNum) {
 
     const tokens = xrefText.split(' ');
     
-    // 💡 대표구절만 볼드체(strong)로 표시
-    let expandedHtml = `<div class="xref-expanded">
-        <div style="margin-bottom: 8px; color: #222; font-size: 1.05em;"><strong>[대표구절] ${mainVerseText}</strong></div>`;
+    let expandedHtml = `<div class="xref-expanded">`;
 
     for (let i = 0; i < tokens.length; i += 2) {
         let abbr = tokens[i];
@@ -217,16 +212,28 @@ function getXrefHtml(xrefText, bookName, chapter, verseNum) {
         let [c, v] = cv.split(':');
         let fullBookName = abbrToName[abbr] || abbr; 
         let verseText = targetData[fullBookName]?.[c]?.[v] || "(본문 없음)";
+        let displayBook = targetMeta.bookNames?.[fullBookName] || fullBookName;
         let displayAbbr = targetMeta.bookAbbrs?.[fullBookName] || fullBookName;
 
-        // 💡 참조 구절들은 일반 굵기로 표시, 얇은 회색 점선으로 살짝 들여쓰기하여 가독성 확보
-        expandedHtml += `<div style="margin-bottom: 6px; padding-left: 8px; border-left: 2px dotted #ccc; color: #444; font-size: 0.95em;">
-            <span class="reference" style="cursor:pointer; font-weight: bold; color: #333;" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">${displayAbbr} ${c}:${v}</span> ${verseText}
-        </div>`;
+        // 💡 볼드체(strong) 태그가 완전히 삭제되었습니다.
+        let refBook = `<span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">${displayBook} ${c}:${v}</span>`;
+        let refAbbr = `<span class="reference" data-book="${fullBookName}" data-chapter="${c}" data-verses="${v}">${displayAbbr} ${c}:${v}</span>`;
+
+        // 설정된 출력 양식(displayMode)을 그대로 따릅니다.
+        let p = "";
+        switch (displayMode) {
+            case 'standard': p = `<p>${refBook}<br>${verseText}</p>`; break;
+            case 'abbr': p = `<p>${refAbbr} ${verseText}</p>`; break;
+            case 'quote': p = `<p>「${verseText}」<br>(${refBook})</p>`; break;
+            case 'short-quote': p = `<p>「${verseText}」(${refAbbr})</p>`; break; 
+            case 'double-quote': p = `<p>『${verseText}』<br>(${refBook})</p>`; break;
+            case 'double-short-quote': p = `<p>『${verseText}』(${refAbbr})</p>`; break; 
+            case 'sequence': p = `<p>${refAbbr} ${verseText}</p>`; break;
+        }
+        expandedHtml += p;
     }
     expandedHtml += `</div>`;
 
-    // 두 개를 동시에 리턴하여 CSS가 투명망토처럼 하나를 가리도록 함 (0초 반응의 핵심)
     return shortHtml + expandedHtml;
 }
 
