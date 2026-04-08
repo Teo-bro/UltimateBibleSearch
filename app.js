@@ -5,7 +5,8 @@
         'hjy': { file: 'bible_data_hjy.json', name: '흠정역', abbr: '흠정', isEn: false, data: {} },
         'pjy': { file: 'bible_data_pjy.json', name: '표준역', abbr: '표준', isEn: false, data: {} }, 
         'krv': { file: 'bible_data_krv.json', name: '개역한글', abbr: '개역', isEn: false, data: {} },
-        'krv2': { file: 'bible_data_krv2.json', name: '개역개정', abbr: '개정', isEn: false, data: {} }
+        'krv2': { file: 'bible_data_krv2.json', name: '개역개정', abbr: '개정', isEn: false, data: {} },
+        'xref': { file: 'bible_data_xref.json', name: '참조구절', abbr: '참조', isEn: false, data: {} }
     };
     
     let selectedVersions = ['kr', 'krv', 'hjy']; 
