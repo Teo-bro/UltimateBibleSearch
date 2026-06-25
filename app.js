@@ -32,6 +32,7 @@ let renderTimer = null;
 let historyStack = []; 
 let redoStack = [];    
 let isRestoring = false; 
+let currentViewMode = "read"; // "read", "word-search", "ref-search" 상태 관리 변수 추가
 
 // 대체 이름(altNames) 배열
 const bibleBooks = [
@@ -404,8 +405,9 @@ function updateSelectedVersionsFromUI() {
         selectedVersions = newSelected;
         updateUIBySelectedVersions();
         
-        if (isSearchActive && currentSearchWord) {
-            executeSearch(document.getElementById('search-input').value.trim()); 
+        const currentQuery = document.getElementById('search-input').value.trim();
+        if ((currentViewMode === "word-search" || currentViewMode === "ref-search") && currentQuery) {
+            executeSearch(currentQuery); 
         } else if (currentBook && currentChapter) {
             displayChapter(currentBook, currentChapter, currentVerse ? [currentVerse] : []);
         }
@@ -484,6 +486,7 @@ function selectChapter(chapter, skipSave = false) {
 }
 
 function displayChapter(bookName, chapter, highlightVerses = []) {
+    currentViewMode = "read";
     isSearchActive = false; 
     clearTimeout(renderTimer);
     
@@ -532,6 +535,7 @@ function displayChapter(bookName, chapter, highlightVerses = []) {
 }
 
 function searchWord(word) {
+    currentViewMode = "word-search";
     saveState();
     clearTimeout(renderTimer); 
     
@@ -796,6 +800,7 @@ function executeSearch(rawQuery) {
 }
 
 function parseMultipleReferences(matches, rawQuery) {
+    currentViewMode = "ref-search";
     saveState();
     isSearchActive = false; 
     clearTimeout(renderTimer); 
@@ -959,9 +964,9 @@ function displayVerseResults(verses, verseGroups = null) {
                     case 'standard': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${displayBook} ${chapter}:${verseNum}</span><br>${text}</p>`; break;
                     case 'abbr': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${displayAbbr} ${chapter}:${verseNum}</span> ${text}</p>`; break;
                     case 'quote': p = `<p data-verse-id="${uniqueId}">「${text}」<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${displayBook} ${chapter}:${verseNum})</span></p>`; break;
-                    case 'short-quote': p = `<p data-verse-id="${uniqueId}">「${text}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${displayAbbr} ${chapter}:${verseNum})</span></p>`; break; 
+                    case 'short-quote': p = `<p data-verse-id="${uniqueId}">「${text}」<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${displayAbbr} ${chapter}:${verseNum}</span></p>`; break; 
                     case 'double-quote': p = `<p data-verse-id="${uniqueId}">『${text}』<br><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${displayBook} ${chapter}:${verseNum})</span></p>`; break;
-                    case 'double-short-quote': p = `<p data-verse-id="${uniqueId}">『${text}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">(${displayAbbr} ${chapter}:${verseNum})</span></p>`; break; 
+                    case 'double-short-quote': p = `<p data-verse-id="${uniqueId}">『${text}』<span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${displayAbbr} ${chapter}:${verseNum}</span></p>`; break; 
                     case 'sequence': p = `<p data-verse-id="${uniqueId}"><span class="reference" data-book="${book}" data-chapter="${chapter}" data-verse="${verseNum}" data-verses="${verseNum}">${displayAbbr} ${chapter}:${verseNum}</span> ${text}</p>`; break;
                 }
                 html += p;
@@ -1134,6 +1139,7 @@ function saveState() {
         book: currentBook, chapter: currentChapter, verse: currentVerse,
         displayMode: displayMode, isCaseSensitive: isCaseSensitive, searchMode: searchMode,
         isExpandXref: isExpandXref, // 👈 상태에 저장
+        currentViewMode: currentViewMode, // 상태 보존용 데이터 추가
         query: document.getElementById('search-input').value,
         selected: [...selectedVersions],
         html: htmlState
@@ -1154,6 +1160,7 @@ function undoAction() {
         book: currentBook, chapter: currentChapter, verse: currentVerse, 
         displayMode: displayMode, isCaseSensitive: isCaseSensitive, searchMode: searchMode,
         isExpandXref: isExpandXref,
+        currentViewMode: currentViewMode,
         query: document.getElementById('search-input').value,
         selected: [...selectedVersions], html: htmlState
     });
@@ -1173,6 +1180,7 @@ function redoAction() {
         book: currentBook, chapter: currentChapter, verse: currentVerse, 
         displayMode: displayMode, isCaseSensitive: isCaseSensitive, searchMode: searchMode,
         isExpandXref: isExpandXref,
+        currentViewMode: currentViewMode,
         query: document.getElementById('search-input').value,
         selected: [...selectedVersions], html: htmlState
     });
@@ -1187,6 +1195,7 @@ function restoreState(state) {
     
     // 💡 저장된 펼치기 상태 불러오기
     isExpandXref = state.isExpandXref || false;
+    currentViewMode = state.currentViewMode || "read"; // 상태 복구 추가
     
     if (JSON.stringify(selectedVersions) !== JSON.stringify(state.selected)) {
         selectedVersions = [...state.selected];
@@ -1289,10 +1298,9 @@ function changeDisplayMode(mode) {
         renderNextSearchChunk();
         renderTimer = setTimeout(autoRenderRemaining, 40);
     } else {
-        const query = document.getElementById('search-input').value;
-        const outputHTML = document.getElementById(`content-${selectedVersions[0]}`)?.innerHTML || "";
-        if (outputHTML.includes('data-verses') || outputHTML.includes('data-verse-id')) {
-            if (query.trim()) executeSearch(query);
+        const query = document.getElementById('search-input').value.trim();
+        if (currentViewMode === "ref-search" && query) {
+            executeSearch(query);
         } else if (currentBook && currentChapter) {
             displayChapter(currentBook, currentChapter, currentVerse ? [currentVerse] : []);
         }
