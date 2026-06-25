@@ -263,9 +263,9 @@ function updateUIBySelectedVersions() {
         }
 
         let innerHTML = `
-            <div class="pane-header">
-                <button class="button btn-copy" onclick="copyContent('${v}')" style="margin-left:0; padding:4px 10px; font-size:14px;">복사</button>
-                ${labelHtml}
+            <div class="pane-header" style="display: flex; align-items: center; height: 35px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box;">
+                <button class="button btn-copy" onclick="copyContent('${v}')" style="margin-left:0; padding:4px 10px; font-size:14px; flex-shrink: 0;">복사</button>
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${labelHtml}</span>
             </div>
             <div class="pane-content" id="content-${v}">`;
         
