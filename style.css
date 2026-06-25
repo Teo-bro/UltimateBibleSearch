@@ -86,3 +86,10 @@ body.show-xref-expanded .xref-expanded {
 body.show-xref-expanded .xref-short {
     display: none;
 }
+.pane-header {
+    display: flex !important;
+    align-items: center !important;
+    height: 36px !important;       /* 모든 헤더의 높이를 완벽히 일치시킴 */
+    white-space: nowrap !important; /* 가로폭이 줄어들어도 절대 아래로 꺾이지 않음 */
+    overflow: hidden !important;
+}
